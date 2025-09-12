@@ -1,0 +1,6 @@
+{
+  "name": "Sensory Manager",
+  "description": "An application to manage clients, services, and generate business reports for a small therapy practice using Gemini.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
