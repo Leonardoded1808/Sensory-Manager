@@ -1,14 +1,8 @@
 
 
 import React, { useState, useMemo } from 'react';
-// FIX: Add .ts extension to import path.
 import { Client, Invoice, Specialist, Service, Expense } from '../types.ts';
-// FIX: Add .ts extension to import path.
-import { generateBusinessSummary, generateSpecialistReport, generateDebtReport, generateExpenseReport } from '../services/geminiService.ts';
-// FIX: Add .ts extension to import path.
 import { calculateAllDebts } from '../services/debtService.ts';
-// FIX: Add .tsx extension to import path.
-import { DebtIcon, ExpensesIcon, GenerateIcon, SpecialistIcon, SparkleIcon } from './icons.tsx';
 
 interface ReportsViewProps {
     clients: Client[];
@@ -18,220 +12,231 @@ interface ReportsViewProps {
     expenses: Expense[];
 }
 
-interface ReportOptionCardProps {
-    title: string;
-    description: string;
-    icon: React.ReactNode;
-    onGenerate: () => void;
-    isGenerating: boolean;
-    disabled: boolean;
-}
-
-const ReportOptionCard: React.FC<ReportOptionCardProps> = ({ title, description, icon, onGenerate, isGenerating, disabled }) => (
-    <div className={`bg-white p-6 rounded-xl shadow-md flex flex-col justify-between transition-all ${disabled ? 'opacity-60' : 'hover:shadow-lg'}`}>
-        <div>
-            <div className="flex items-center gap-3 mb-2">
-                <div className="bg-blue-100 p-2 rounded-full">{icon}</div>
-                <h3 className="text-lg font-bold text-gray-800">{title}</h3>
-            </div>
-            <p className="text-sm text-gray-500 mt-2 mb-6">{description}</p>
-        </div>
-        <button
-            onClick={onGenerate}
-            disabled={isGenerating || disabled}
-            className="w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 disabled:bg-blue-300 disabled:cursor-not-allowed"
-        >
-            <SparkleIcon className="w-5 h-5"/>
-            <span>{isGenerating ? 'Generando...' : 'Generar'}</span>
-        </button>
-    </div>
-);
-
 const ReportsView: React.FC<ReportsViewProps> = ({ clients, invoices, specialists, services, expenses }) => {
-    const [report, setReport] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [reportTitle, setReportTitle] = useState<string>('');
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
 
     const filteredData = useMemo(() => {
-        if (!startDate && !endDate) {
-            return { filteredInvoices: invoices, filteredExpenses: expenses };
-        }
+        let filteredInvoices = invoices;
+        let filteredExpenses = expenses;
 
-        const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
-        const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : null;
-
-        const filteredInvoices = invoices.filter(inv => {
-            const invDate = new Date(inv.createdAt);
-            if (start && invDate < start) return false;
-            if (end && invDate > end) return false;
-            return true;
-        });
-
-        const filteredExpenses = expenses.filter(exp => {
-            const expDate = new Date(`${exp.date}T00:00:00.000Z`); // Treat date as UTC
-            if (start && expDate < start) return false;
-            if (end && expDate > end) return false;
-            return true;
-        });
-
-        return { filteredInvoices, filteredExpenses };
-    }, [startDate, endDate, invoices, expenses]);
-
-
-    const handleGenerate = async (reportType: 'business' | 'specialists' | 'debt' | 'expenses') => {
-        setIsLoading(true);
-        setError(null);
-        setReport(null);
-        setReportTitle('');
-
-        const { filteredInvoices, filteredExpenses } = filteredData;
-        
-        let dateRangeTitle = '';
         if (startDate || endDate) {
-            const startStr = startDate ? new Date(`${startDate}T00:00:00.000Z`).toLocaleDateString('es-ES', { timeZone: 'UTC' }) : 'Inicio';
-            const endStr = endDate ? new Date(`${endDate}T00:00:00.000Z`).toLocaleDateString('es-ES', { timeZone: 'UTC' }) : 'Ahora';
-            dateRangeTitle = ` (${startStr} - ${endStr})`;
-        }
+            const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
+            const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : null;
 
-        try {
-            let summary = '';
-            let title = '';
-            switch (reportType) {
-                case 'business':
-                    title = 'Resumen de Negocio' + dateRangeTitle;
-                    summary = await generateBusinessSummary(clients, filteredInvoices);
-                    break;
-                case 'specialists':
-                    title = 'Reporte de Especialistas' + dateRangeTitle;
-                    summary = await generateSpecialistReport(specialists, filteredInvoices, services);
-                    break;
-                case 'debt':
-                    title = 'Análisis de Deudas' + dateRangeTitle;
-                    const debtData = calculateAllDebts(clients, filteredInvoices);
-                    summary = await generateDebtReport(debtData);
-                    break;
-                case 'expenses':
-                    title = 'Análisis de Gastos' + dateRangeTitle;
-                    summary = await generateExpenseReport(filteredExpenses);
-                    break;
-            }
-            setReport(summary);
-            setReportTitle(title);
-        } catch (err) {
-            setError('Ocurrió un error al generar el reporte.');
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+            filteredInvoices = invoices.filter(inv => {
+                const invDate = new Date(inv.createdAt);
+                if (start && invDate < start) return false;
+                if (end && invDate > end) return false;
+                return true;
+            });
 
-    const reportOptions = [
-        { 
-            type: 'business' as const, 
-            title: 'Resumen de Negocio', 
-            description: 'Análisis general de clientes, facturación y popularidad de servicios.', 
-            icon: <GenerateIcon className="w-6 h-6 text-blue-600"/>,
-            disabled: clients.length === 0 || filteredData.filteredInvoices.length === 0 
-        },
-        { 
-            type: 'specialists' as const, 
-            title: 'Reporte de Especialistas', 
-            description: 'Desglose de ganancias y servicios realizados por cada especialista.',
-            icon: <SpecialistIcon className="w-6 h-6 text-blue-600"/>,
-            disabled: specialists.length === 0 || filteredData.filteredInvoices.length === 0
-        },
-        { 
-            type: 'debt' as const, 
-            title: 'Análisis de Deudas', 
-            description: 'Resumen de deudas pendientes y clientes con saldos por pagar.', 
-            icon: <DebtIcon className="w-6 h-6 text-blue-600"/>,
-            disabled: filteredData.filteredInvoices.length === 0
-        },
-        { 
-            type: 'expenses' as const, 
-            title: 'Análisis de Gastos', 
-            description: 'Detalle de gastos fijos y variables para optimizar las finanzas.', 
-            icon: <ExpensesIcon className="w-6 h-6 text-blue-600"/>,
-            disabled: filteredData.filteredExpenses.length === 0
-        },
-    ];
+            filteredExpenses = expenses.filter(exp => {
+                const expDate = new Date(`${exp.date}T00:00:00.000Z`);
+                if (start && expDate < start) return false;
+                if (end && expDate > end) return false;
+                return true;
+            });
+        }
+        
+        // Calculate basic metrics
+        const totalBilled = filteredInvoices.reduce((sum, inv) => sum + inv.price, 0);
+        const totalCollected = filteredInvoices.reduce((sum, inv) => sum + inv.amountPaid, 0);
+        const totalDebtsGenerated = filteredInvoices.reduce((sum, inv) => sum + inv.balance, 0);
+        const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+        
+        // Unique patients
+        const uniquePatientIds = new Set(filteredInvoices.map(inv => inv.clientId));
+        const patientsAttended = uniquePatientIds.size;
+
+        // Service usage breakdown
+        const serviceMap: Record<string, { count: number; total: number; collected: number }> = {};
+        filteredInvoices.forEach(inv => {
+            const name = inv.serviceName || 'Otros';
+            if (!serviceMap[name]) serviceMap[name] = { count: 0, total: 0, collected: 0 };
+            serviceMap[name].count += 1;
+            serviceMap[name].total += inv.price;
+            serviceMap[name].collected += inv.amountPaid;
+        });
+        const serviceStats = Object.keys(serviceMap).map(name => ({
+            name,
+            ...serviceMap[name]
+        })).sort((a, b) => b.collected - a.collected);
+
+        // Specialist breakdown
+        const specialistMap: Record<string, { count: number; total: number }> = {};
+        
+        filteredInvoices.forEach(inv => {
+            const specId = inv.specialistId;
+            if (!specId) return;
+            const spec = specialists.find(s => s.id === specId);
+            const specName = spec ? spec.name : 'Desconocido';
+            
+            if (!specialistMap[specName]) specialistMap[specName] = { count: 0, total: 0 };
+            specialistMap[specName].count += 1;
+            specialistMap[specName].total += inv.price;
+        });
+        const specialistStats = Object.keys(specialistMap).map(name => ({
+            name,
+            ...specialistMap[name]
+        })).sort((a, b) => b.total - a.total);
+
+        // Total Debts global
+        const allDebts = calculateAllDebts(clients, invoices); 
+        const outstandingCurrentDebt = allDebts.reduce((sum, d) => sum + d.totalDebt, 0);
+
+        return { 
+            filteredInvoices, 
+            filteredExpenses,
+            totalBilled,
+            totalCollected,
+            totalDebtsGenerated,
+            totalExpenses,
+            patientsAttended,
+            serviceStats,
+            specialistStats,
+            outstandingCurrentDebt,
+            netProfit: totalCollected - totalExpenses
+        };
+    }, [startDate, endDate, invoices, expenses, clients, specialists, services]);
+
 
     return (
-        <div className="p-5 animate-fadeIn space-y-6">
-            <div className="bg-white p-4 rounded-xl shadow-md space-y-4">
-                <h3 className="text-lg font-bold text-gray-800">Filtrar por Rango de Fechas</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div>
-                        <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+        <div className="p-5 animate-fadeIn min-h-screen">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-end justify-between mb-6">
+                <div>
+                    <h3 className="text-xl font-extrabold text-gray-900 mb-1">Reporte Financiero y Clínico</h3>
+                    <p className="text-sm text-gray-500">Seleccione un rango de fechas para generar el análisis.</p>
+                </div>
+                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                    <div className="flex flex-col">
+                        <label htmlFor="start-date" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Desde</label>
                         <input 
                             type="date" 
                             id="start-date"
                             value={startDate}
                             onChange={e => setStartDate(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                            style={{colorScheme: 'light'}}
+                            className="p-2 border border-gray-200 rounded-lg focus:ring-2 focus:blue-500 focus:outline-none w-full md:w-40 text-sm"
                             max={endDate || undefined}
                         />
                     </div>
-                    <div>
-                        <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+                    <div className="flex flex-col">
+                        <label htmlFor="end-date" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Hasta</label>
                         <input 
                             type="date" 
                             id="end-date"
                             value={endDate}
                             onChange={e => setEndDate(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                            style={{colorScheme: 'light'}}
+                            className="p-2 border border-gray-200 rounded-lg focus:ring-2 focus:blue-500 focus:outline-none w-full md:w-40 text-sm"
                             min={startDate || undefined}
                         />
                     </div>
                     <button 
                         onClick={() => { setStartDate(''); setEndDate(''); }}
-                        className="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full h-10"
+                        className="bg-gray-100 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors shrink-0 h-10 mt-auto text-sm"
                     >
                         Limpiar Filtros
                     </button>
                 </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ganancias (Recaudado)</p>
+                    <p className="text-3xl font-extrabold text-green-600 mt-1">${filteredData.totalCollected.toFixed(2)}</p>
+                    <p className="text-xs font-semibold text-gray-500 mt-1 flex justify-between">
+                        <span>Facturado: ${filteredData.totalBilled.toFixed(2)}</span>
+                    </p>
+                </div>
+                
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Balance Neto del Período</p>
+                    <p className={`text-3xl font-extrabold mt-1 ${filteredData.netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                        ${filteredData.netProfit.toFixed(2)}
+                    </p>
+                    <p className="text-xs font-semibold text-gray-500 mt-1 flex justify-between">
+                        <span>Ingresos vs Gastos</span>
+                    </p>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {reportOptions.map(opt => (
-                     <ReportOptionCard 
-                        key={opt.type}
-                        title={opt.title}
-                        description={opt.description}
-                        icon={opt.icon}
-                        isGenerating={isLoading}
-                        disabled={opt.disabled}
-                        onGenerate={() => handleGenerate(opt.type)}
-                     />
-                ))}
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Gastos Operativos</p>
+                    <p className="text-3xl font-extrabold text-orange-600 mt-1">${filteredData.totalExpenses.toFixed(2)}</p>
+                    <p className="text-xs font-semibold text-gray-500 mt-1 flex justify-between">
+                        <span>{filteredData.filteredExpenses.length} registros de gasto</span>
+                    </p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pacientes Atendidos</p>
+                    <p className="text-3xl font-extrabold text-gray-900 mt-1">{filteredData.patientsAttended}</p>
+                    <p className="text-xs font-semibold text-gray-500 mt-1 flex justify-between">
+                        <span>Pacientes únicos en rango</span>
+                    </p>
+                </div>
             </div>
 
-            {isLoading && (
-                <div className="text-center py-16 bg-white rounded-xl shadow-md">
-                    <svg className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    <p className="text-lg font-semibold text-gray-600">Generando reporte con IA...</p>
-                    <p className="text-gray-500">Esto puede tomar un momento.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <h4 className="text-lg font-extrabold text-gray-900 mb-4 border-b pb-2">Rendimiento por Servicios</h4>
+                    {filteredData.serviceStats.length > 0 ? (
+                        <div className="space-y-4">
+                            {filteredData.serviceStats.map(stat => (
+                                <div key={stat.name} className="flex justify-between items-center text-sm">
+                                    <div>
+                                        <p className="font-bold text-gray-800">{stat.name}</p>
+                                        <p className="text-xs text-gray-500">{stat.count} contratos emitidos</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-extrabold text-green-700">${stat.collected.toFixed(2)}</p>
+                                        <p className="text-xs text-gray-400">Facturado: ${stat.total.toFixed(2)}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-gray-500 text-center py-4">No hay datos de servicios en este período.</p>
+                    )}
                 </div>
-            )}
 
-            {error && (
-                <div className="text-center py-16 bg-red-50 p-4 rounded-xl shadow-md">
-                     <p className="text-lg font-semibold text-red-700">{error}</p>
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <h4 className="text-lg font-extrabold text-gray-900 mb-4 border-b pb-2">Productividad por Especialista</h4>
+                    {filteredData.specialistStats.length > 0 ? (
+                        <div className="space-y-4">
+                            {filteredData.specialistStats.map(stat => (
+                                <div key={stat.name} className="flex justify-between items-center text-sm">
+                                    <div>
+                                        <p className="font-bold text-gray-800">{stat.name}</p>
+                                        <p className="text-xs text-gray-500">{stat.count} servicios completados</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-extrabold text-gray-900">${stat.total.toFixed(2)}</p>
+                                        <p className="text-xs text-gray-400">Valor facturado</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-gray-500 text-center py-4">No hay datos de especialistas en este período.</p>
+                    )}
                 </div>
-            )}
 
-            {report && (
-                <div className="bg-white p-6 rounded-xl shadow-md mt-6 animate-fadeIn">
-                     <h3 className="text-xl font-bold text-gray-800 mb-4">{reportTitle}</h3>
-                     <pre className="text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{report}</pre>
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm lg:col-span-2">
+                    <h4 className="text-lg font-extrabold text-gray-900 mb-4 border-b pb-2">Resumen de Deudas</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+                            <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">Deuda Generada en Período</p>
+                            <p className="text-2xl font-extrabold text-red-600">${filteredData.totalDebtsGenerated.toFixed(2)}</p>
+                            <p className="text-xs text-red-500 mt-1">Saldo pendiente de las facturas emitidas en este rango.</p>
+                        </div>
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Deuda Histórica Global</p>
+                            <p className="text-2xl font-extrabold text-gray-800">${filteredData.outstandingCurrentDebt.toFixed(2)}</p>
+                            <p className="text-xs text-gray-500 mt-1">Suma total de deudas pendientes en todo el sistema.</p>
+                        </div>
+                    </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 };

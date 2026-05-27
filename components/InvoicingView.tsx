@@ -205,49 +205,49 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onClose, clients, services, s
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 text-gray-900">
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Cliente</label>
-                <select name="clientId" value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-800 disabled:cursor-not-allowed" required disabled={isEditing}>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Cliente</label>
+                <select name="clientId" value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} className="w-full p-2.5 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed" required disabled={isEditing}>
                      <option value="" disabled>-- Seleccione un cliente --</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.representativeName} (Paciente: {c.patientName})</option>)}
                 </select>
             </div>
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Servicio</label>
-                <select name="serviceId" value={selectedServiceId} onChange={handleServiceChange} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-800 disabled:cursor-not-allowed" required disabled={isEditing}>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Servicio</label>
+                <select name="serviceId" value={selectedServiceId} onChange={handleServiceChange} className="w-full p-2.5 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed" required disabled={isEditing}>
                     <option value="" disabled>-- Seleccione un servicio --</option>
                     {services.map(s => <option key={s.id} value={s.id}>{s.serviceName} (${s.price})</option>)}
                 </select>
             </div>
              <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Especialista (Opcional)</label>
-                <select name="specialistId" value={selectedSpecialistId} onChange={e => setSelectedSpecialistId(e.target.value)} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" disabled={availableSpecialists.length === 0}>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Especialista (Opcional)</label>
+                <select name="specialistId" value={selectedSpecialistId} onChange={e => setSelectedSpecialistId(e.target.value)} className="w-full p-2.5 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" disabled={availableSpecialists.length === 0}>
                     <option value="">-- {availableSpecialists.length === 0 ? 'Ninguno disponible para este servicio' : 'Seleccione un especialista'} --</option>
                     {availableSpecialists.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
                 </select>
             </div>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-sm font-bold text-gray-300 mb-1">Ganancia Especialista</label>
-                    <input type="number" name="specialistEarnings" value={specialistEarnings} onChange={e => setSpecialistEarnings(e.target.value)} disabled={!selectedSpecialistId} step="0.01" min="0" className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-800 disabled:cursor-not-allowed" placeholder={!selectedSpecialistId ? "N/A" : "0.00"}/>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Ganancia Especialista</label>
+                    <input type="number" name="specialistEarnings" value={specialistEarnings} onChange={e => setSpecialistEarnings(e.target.value)} disabled={!selectedSpecialistId} step="0.01" min="0" className="w-full p-2.5 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed" placeholder={!selectedSpecialistId ? "N/A" : "0.00"}/>
                 </div>
                 <div>
-                    <label className="block text-sm font-bold text-gray-300 mb-1">{isEditing ? 'Monto Pagado (No editable)' : 'Abono Inicial'}</label>
-                    <input type="number" name="amountPaid" value={amountPaid} onChange={e => setAmountPaid(e.target.value)} step="0.01" min="0" max={price} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-800 disabled:text-gray-400" placeholder="0.00" disabled={isEditing}/>
-                    {isEditing && <p className="text-xs text-gray-400 mt-1">Use el botón 'Abonar' para agregar pagos.</p>}
+                    <label className="block text-sm font-bold text-gray-700 mb-1">{isEditing ? 'Monto Pagado (No editable)' : 'Abono Inicial'}</label>
+                    <input type="number" name="amountPaid" value={amountPaid} onChange={e => setAmountPaid(e.target.value)} step="0.01" min="0" max={price} className="w-full p-2.5 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400" placeholder="0.00" disabled={isEditing}/>
+                    {isEditing && <p className="text-xs text-gray-500 mt-1">Use el botón 'Abonar' para agregar pagos.</p>}
                 </div>
             </div>
             
             {/* Manager Earnings Section */}
-            <div className="space-y-3 p-3 bg-slate-700/50 rounded-lg">
-                <label className="block text-sm font-bold text-gray-300">Ganancias de Gerentes (Opcional)</label>
+            <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <label className="block text-sm font-bold text-gray-700">Ganancias de Gerentes (Opcional)</label>
                 {managerEarnings.map((earning, index) => (
                     <div key={index} className="flex items-center gap-2">
                         <select
                             value={earning.managerId}
                             onChange={(e) => handleManagerEarningChange(index, 'managerId', e.target.value)}
-                            className="w-full p-2 bg-slate-700 border border-slate-600 text-white rounded-lg"
+                            className="w-full p-2 bg-white border border-gray-300 text-gray-900 rounded-lg text-sm"
                         >
                             <option value="">-- Seleccione Gerente --</option>
                             {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -257,25 +257,25 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onClose, clients, services, s
                             value={earning.amount}
                             onChange={(e) => handleManagerEarningChange(index, 'amount', e.target.value)}
                             step="0.01" min="0" placeholder="Monto"
-                            className="w-32 p-2 bg-slate-700 border border-slate-600 text-white rounded-lg"
+                            className="w-32 p-2 bg-white border border-gray-300 text-gray-900 rounded-lg text-sm"
                         />
-                        <button type="button" onClick={() => removeManagerEarning(index)} className="p-2 text-red-400 hover:text-red-300">
+                        <button type="button" onClick={() => removeManagerEarning(index)} className="p-2 text-red-650 hover:text-red-800 transition-colors">
                             <TrashIcon className="w-5 h-5"/>
                         </button>
                     </div>
                 ))}
-                <button type="button" onClick={addManagerEarning} className="text-sm font-semibold text-blue-400 hover:text-blue-300">
+                <button type="button" onClick={addManagerEarning} className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors">
                     + Añadir Ganancia de Gerente
                 </button>
             </div>
 
              <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Precio Total del Servicio</label>
-                <input type="text" value={`$${(price || 0).toFixed(2)}`} className="w-full p-3 bg-slate-800 border border-slate-600 text-gray-300 rounded-lg" readOnly />
+                <label className="block text-sm font-bold text-gray-700 mb-1">Precio Total del Servicio</label>
+                <input type="text" value={`$${(price || 0).toFixed(2)}`} className="w-full p-2.5 bg-gray-100 border border-gray-300 text-gray-850 font-extrabold rounded-lg text-lg" readOnly />
             </div>
-            <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={onClose} className="px-6 py-3 bg-slate-600 text-gray-200 font-bold rounded-lg hover:bg-slate-500">Cancelar</button>
-                <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">{isEditing ? 'Guardar Cambios' : 'Crear Recibo'}</button>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                <button type="button" onClick={onClose} className="px-6 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200 transition-colors">Cancelar</button>
+                <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors">{isEditing ? 'Guardar Cambios' : 'Crear Recibo'}</button>
             </div>
         </form>
     );
@@ -290,48 +290,62 @@ interface PaymentFormProps {
 const PaymentForm: React.FC<PaymentFormProps> = ({ onClose, onSubmit, maxAmount }) => {
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const paymentAmount = parseFloat(amount);
-        if (isNaN(paymentAmount) || paymentAmount <= 0 || paymentAmount > maxAmount) {
-            alert(`Por favor, ingrese un monto válido, mayor a 0 y no mayor al saldo pendiente de $${maxAmount.toFixed(2)}.`);
+        if (isNaN(paymentAmount) || paymentAmount <= 0) {
+            setError('Por favor, ingrese un monto válido mayor a 0.');
             return;
         }
+        if (Number(paymentAmount.toFixed(2)) > Number(maxAmount.toFixed(2))) {
+            setError(`El monto no puede superar el saldo pendiente de $${maxAmount.toFixed(2)}.`);
+            return;
+        }
+        setError(null);
         await onSubmit(paymentAmount, date);
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 text-gray-900">
+            {error && (
+                <div className="bg-red-50 text-red-700 p-3 rounded-xl border border-red-100 text-sm font-semibold animate-pulse">
+                    {error}
+                </div>
+            )}
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Monto a Abonar</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Monto a Abonar (Saldo: ${maxAmount.toFixed(2)})</label>
                 <input
                     type="number"
                     value={amount}
-                    onChange={e => setAmount(e.target.value)}
+                    onChange={e => {
+                        setAmount(e.target.value);
+                        setError(null);
+                    }}
                     step="0.01"
                     min="0.01"
                     max={maxAmount.toFixed(2)}
-                    className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-base"
                     placeholder="0.00"
                     required
                     autoFocus
                 />
             </div>
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Fecha del Abono</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Fecha del Abono</label>
                 <input
                     type="date"
                     value={date}
                     onChange={e => setDate(e.target.value)}
-                    className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    style={{colorScheme: 'dark'}}
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-base"
+                    style={{colorScheme: 'light'}}
                     required
                 />
             </div>
-            <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={onClose} className="px-6 py-3 bg-slate-600 text-gray-200 font-bold rounded-lg hover:bg-slate-500">Cancelar</button>
-                <button type="submit" className="px-6 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700">Registrar Abono</button>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                <button type="button" onClick={onClose} className="px-6 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200 transition-colors">Cancelar</button>
+                <button type="submit" className="px-6 py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-750 transition-colors">Registrar Abono</button>
             </div>
         </form>
     );

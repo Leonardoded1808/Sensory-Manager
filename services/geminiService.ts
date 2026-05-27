@@ -4,11 +4,19 @@ import { GoogleGenAI } from "@google/genai";
 // FIX: Add .ts extension to import path.
 import { Client, DebtInfo, Invoice, MedicalRecordEntry, MedicalReportData, Specialist, Service, Expense } from '../types.ts';
 
-if (!process.env.API_KEY) {
-  console.error("API_KEY environment variable not set.");
+const resolvedApiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || "";
+if (!resolvedApiKey) {
+  console.error("Neither GEMINI_API_KEY nor API_KEY environment variable is set.");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const ai = new GoogleGenAI({ 
+  apiKey: resolvedApiKey,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build'
+    }
+  }
+});
 
 export const generateBusinessSummary = async (clients: Client[], invoices: Invoice[]): Promise<string> => {
     const reportData = {
@@ -41,7 +49,7 @@ export const generateBusinessSummary = async (clients: Client[], invoices: Invoi
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: prompt,
         });
         return response.text;
@@ -84,7 +92,7 @@ export const generateSpecialistReport = async (specialists: Specialist[], invoic
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: prompt,
         });
         return response.text;
@@ -125,7 +133,7 @@ export const generateDebtReport = async (debtInfo: DebtInfo[]): Promise<string> 
     `;
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: prompt,
         });
         return response.text;
@@ -172,7 +180,7 @@ export const generateExpenseReport = async (expenses: Expense[]): Promise<string
     `;
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: prompt,
         });
         return response.text;
@@ -235,7 +243,7 @@ ${debtItems}`;
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: prompt,
         });
         return response.text;
@@ -247,7 +255,7 @@ ${debtItems}`;
 
 
 const getPartFromDataUrl = (dataUrl: string) => {
-    const match = dataUrl.match(/^data:(image\/\w+);base64,(.*)$/);
+    const match = dataUrl.match(/^data:((?:image\/\w+)|(?:application\/pdf));base64,(.*)$/);
     if (!match) return null;
     return {
         inlineData: {
@@ -261,8 +269,8 @@ export const generateMedicalReport = async (data: MedicalReportData): Promise<st
     const { client, medicalRecords, invoices, customInstructions } = data;
 
     const parts: any[] = [];
-    const imageReferences: string[] = [];
-    let imageCounter = 1;
+    const fileReferences: string[] = [];
+    let fileCounter = 1;
 
     const medicalHistoryFormatted = medicalRecords.map(r => {
         let entryText = ` - Fecha: ${new Date(r.date).toLocaleDateString('es-ES', { timeZone: 'UTC' })}
@@ -275,10 +283,21 @@ export const generateMedicalReport = async (data: MedicalReportData): Promise<st
             const imagePart = getPartFromDataUrl(r.image);
             if (imagePart) {
                 parts.push(imagePart);
-                const reference = `[IMAGEN ${imageCounter}]`;
+                const reference = `[IMAGEN ${fileCounter}]`;
                 entryText += `\n   - Anexo: ${reference}`;
-                imageReferences.push(reference);
-                imageCounter++;
+                fileReferences.push(reference);
+                fileCounter++;
+            }
+        }
+        
+        if (r.pdf) {
+            const pdfPart = getPartFromDataUrl(r.pdf);
+            if (pdfPart) {
+                parts.push(pdfPart);
+                const reference = `[DOCUMENTO PDF ${fileCounter} - ${r.pdfName || 'anexo'}]`;
+                entryText += `\n   - Anexo PDF: ${reference}`;
+                fileReferences.push(reference);
+                fileCounter++;
             }
         }
         return entryText;
@@ -288,12 +307,14 @@ export const generateMedicalReport = async (data: MedicalReportData): Promise<st
         ` - Servicio: ${i.serviceName} por $${i.price.toFixed(2)} (${new Date(i.createdAt).toLocaleDateString('es-ES')})`
     ).join('\n');
 
-     const imageInstruction = imageReferences.length > 0
-        ? `Se han adjuntado ${imageReferences.length} imagen(es) a este informe, referenciadas como ${imageReferences.join(', ')}. Por favor, analiza estas imágenes como parte del progreso del paciente (ej. posturas, trabajos manuales, expresiones) y considera tus observaciones en el informe final.`
+     const imageInstruction = fileReferences.length > 0
+        ? `Se han adjuntado ${fileReferences.length} archivo(s) de evidencia (imágenes y/o PDFs) a este informe, referenciados como ${fileReferences.join(', ')}. Por favor, analiza el contenido de estas imágenes y lee exhaustivamente los documentos PDF adjuntos. Integra la información clínica descubierta en estos archivos como parte del historial y progreso del paciente, considerando observaciones, resultados de estudios y otras notas relevantes.`
         : '';
 
     const prompt = `
-        Actúa como un terapeuta clínico altamente experimentado. Tu tarea es redactar un informe médico profesional y detallado en español para el paciente, basándote en la información proporcionada. El informe debe ser estructurado, claro y utilizar terminología clínica apropiada pero comprensible.
+        Actúa como un terapeuta clínico altamente experimentado con formación médica avanzada. Tu tarea es redactar un informe clínico y de evolución terapéutica sumamente formal, riguroso, científico y detallado en español para el paciente, basándote de forma estricta y exclusiva en lo que las terapeutas han registrado en el historial de sesiones y notas clínicas adjuntas. El informe debe estar redactado con un tono formal, serio, clínico, técnico y objetivo, absteniéndose de utilizar lenguaje coloquial o de realizar conjeturas o diagnósticos no evidenciados en las anotaciones provistas.
+
+        REGLA CLÍNICA DE RIGOR ABSOLUTO: Tu análisis de evolución de hitos debe fundamentarse de manera estricta y fiel EN LAS ANOTACIONES CLÍNICAS REGISTRADAS POR LAS TERAPEUTAS. No asumas ni inventes síntomas, avances, ni retrocesos que no se encuentren documentados explícitamente en el expediente del historial de sesiones médicas.
 
         **Datos del Paciente:**
         - Nombre del Paciente: ${client.patientName}
@@ -301,7 +322,7 @@ export const generateMedicalReport = async (data: MedicalReportData): Promise<st
         - Nombre del Representante: ${client.representativeName}
         - Cliente desde: ${new Date(client.createdAt).toLocaleDateString('es-ES')}
 
-        **Historial de Sesiones Clínicas:**
+        **Historial de Sesiones Clínicas Registradas en el Sistema:**
         ${medicalHistoryFormatted || 'No hay registros clínicos detallados.'}
         
         **Análisis de Imágenes Adjuntas:**
@@ -313,27 +334,27 @@ export const generateMedicalReport = async (data: MedicalReportData): Promise<st
         **Instrucciones Adicionales del Terapeuta para este Informe:**
         "${customInstructions || 'No hay instrucciones adicionales.'}"
 
-        **INSTRUCCIONES DE GENERACIÓN:**
-        1.  **Formato Profesional:** Estructura el informe con las siguientes secciones obligatorias, usando **markdown** para los títulos:
-            - **INFORME DE PROGRESO CLÍNICO**
-            - **1. Datos del Paciente**
-            - **2. Resumen del Historial Terapéutico** (Resume las actividades y progresos basados en el historial de sesiones).
-            - **3. Análisis de Hitos y Objetivos** (Analiza los hitos logrados, en progreso o no logrados, y cómo se relacionan con los objetivos terapéuticos).
-            - **4. Observaciones del Terapeuta (incluyendo análisis de imágenes si aplica)** (Basándote en las notas Y LAS IMÁGENES, describe patrones, fortalezas o áreas de mejora).
-            - **5. Conclusiones y Recomendaciones** (Ofrece una conclusión general del período evaluado y sugiere los próximos pasos o áreas de enfoque).
-        2.  **Tono y Lenguaje:** Utiliza un tono profesional, objetivo y empático.
-        3.  **Integración de Datos:** Sintetiza la información de todas las fuentes (datos del paciente, historial, notas, IMÁGENES) para crear un análisis coherente.
-        4.  **Instrucciones del Usuario:** Presta especial atención a las "Instrucciones Adicionales del Terapeuta" y asegúrate de que el informe refleje esas directrices. Por ejemplo, si se pide enfocarse en un aspecto motor, dale prioridad en el análisis.
-        5.  **Confidencialidad:** Finaliza el informe con una nota de confidencialidad estándar.
+        **INSTRUCCIONES DE GENERACIÓN DE INFORME:**
+        1.  **Formato Clínico Profesional:** Estructura el informe con las siguientes secciones obligatorias, utilizando **markdown** para los títulos:
+            - **INFORME DE PROGRESO Y EVOLUCIÓN CLÍNICA**
+            - **1. Datos de Identificación del Paciente**
+            - **2. Síntesis y Resumen de Sesiones de Intervención** (Realiza un resumen estructurado y formal de las actividades y progresos basándote única y estrictamente en las notas clínicas de las terapeutas).
+            - **3. Evaluación Integral de Hitos y Objetivos Terapéuticos** (Analiza los hitos registrados y su estado actual: logrados, en proceso, o pendientes, vinculados estrictamente al progreso reportado).
+            - **4. Observaciones Clínicas y Técnicas (incluyendo análisis de imágenes si aplica)** (Describe patrones motores, conductuales, adaptativos, cognitivos u otros observados en las notas y fotografías, manteniendo máxima seriedad técnica).
+            - **5. Conclusiones y Propuesta de Continuidad Terapéutica** (Ofrece un dictamen formal de cierre del período evaluado y sugiere las directrices o recomendaciones futuras de enfoque clínico).
+        2.  **Tono y Lenguaje Exigido:** Riguroso, altamente formal, científico, objetivo, empático institucional y clínico.
+        3.  **Integración Científica de Datos:** Reúne la información consolidada en las historias de la terapeuta, sin desviar la observación empírica.
+        4.  **Cumplimiento de Directrices del Terapeuta:** Sigue meticulosamente cualquier requerimiento de enfoque en "Instrucciones Adicionales del Terapeuta".
+        5.  **Cláusula de Confidencialidad:** Añade un aviso estándar de reserva de la información e historial de salud bajo la normativa sanitaria aplicable.
 
-        Genera el informe ahora.
+        Genera el informe formal ahora.
     `;
     
     parts.unshift({ text: prompt });
 
      try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: { parts },
         });
         return response.text;

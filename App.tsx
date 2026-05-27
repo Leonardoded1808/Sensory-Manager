@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 // Import types
-import { Page, Client, Service, Invoice, Specialist, TicketConfig, Expense, MedicalRecordEntry, User, Payment, Notification, Appointment, SpecialistExportData, SpecialistMedicalData, Manager, ManagerPayout } from './types.ts';
+import { Page, Client, Service, Invoice, Specialist, TicketConfig, Expense, MedicalRecordEntry, User, Payment, Notification, Appointment, SpecialistExportData, SpecialistMedicalData, Manager, ManagerPayout, WhatsAppTemplate, SpecialistPayout } from './types.ts';
 
 // Import views
 import LoginView from './components/LoginView.tsx';
@@ -19,6 +19,7 @@ import ManagersView from './components/ManagersView.tsx';
 import ManagementView from './components/ManagementView.tsx';
 import ReportsView from './components/ReportsView.tsx';
 import CalendarView from './components/CalendarView.tsx';
+import AutoBackupModal from './components/AutoBackupModal.tsx';
 
 // Import components
 import Header from './components/Header.tsx';
@@ -34,6 +35,28 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [activePage, setActivePage] = useState<Page>('dashboard');
+    const [targetClientId, setTargetClientId] = useState<string | null>(null);
+
+    const [isAutoBackupModalOpen, setIsAutoBackupModalOpen] = useState(false);
+
+    useEffect(() => {
+        if (!isLoading && currentUser?.role === 'admin') {
+            const lastBackupStr = localStorage.getItem('sensory-manager-last-backup');
+            const todayStr = new Date().toISOString().split('T')[0];
+            if (lastBackupStr !== todayStr) {
+                // Short delay so it doesn't pop up instantly on load
+                const timer = setTimeout(() => {
+                    setIsAutoBackupModalOpen(true);
+                }, 3000);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [isLoading, currentUser]);
+
+    const handleNavigateToClient = (clientId: string) => {
+        setTargetClientId(clientId);
+        setActivePage('clients');
+    };
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     
     // App Data State
@@ -41,12 +64,14 @@ const App: React.FC = () => {
     const [services, setServices] = useState<Service[]>([]);
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [specialists, setSpecialists] = useState<Specialist[]>([]);
+    const [specialistPayouts, setSpecialistPayouts] = useState<SpecialistPayout[]>([]);
     const [managers, setManagers] = useState<Manager[]>([]);
     const [managerPayouts, setManagerPayouts] = useState<ManagerPayout[]>([]);
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [medicalRecords, setMedicalRecords] = useState<MedicalRecordEntry[]>([]);
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [ticketConfig, setTicketConfig] = useState<TicketConfig>({});
+    const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsAppTemplate[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [adminPassword, setAdminPassword] = useState<string | null>(null);
 
@@ -127,12 +152,21 @@ const App: React.FC = () => {
                 setServices(await db.getStoreData<Service>('services'));
                 setInvoices(await db.getStoreData<Invoice>('invoices'));
                 setSpecialists(await db.getStoreData<Specialist>('specialists'));
+                setSpecialistPayouts(await db.getStoreData<SpecialistPayout>('specialistPayouts'));
                 setManagers(await db.getStoreData<Manager>('managers'));
                 setManagerPayouts(await db.getStoreData<ManagerPayout>('managerPayouts'));
                 setExpenses(await db.getStoreData<Expense>('expenses'));
                 setMedicalRecords(await db.getStoreData<MedicalRecordEntry>('medicalRecords'));
                 setAppointments(await db.getStoreData<Appointment>('appointments'));
                 setTicketConfig(await db.getSingleItem<TicketConfig>('ticketConfig', 'currentConfig') || {});
+                
+                const loadedTemplates = await db.getSingleItem<WhatsAppTemplate[]>('ticketConfig', 'whatsappTemplates');
+                if (loadedTemplates) {
+                    setWhatsappTemplates(loadedTemplates);
+                } else {
+                    setWhatsappTemplates([{ id: 'default', title: 'Recordatorio Estándar', template: 'Hola {{representante}}, de parte del centro le recordamos que {{paciente}} tiene una cita programada para el {{fecha}} a las {{hora}}. Por favor confirme su asistencia. ¡Le esperamos!' }]);
+                }
+
                 setCurrentUser(await db.getSingleItem<User>('user', 'currentUser') || null);
                 
                 let storedPassword = await db.getSingleItem<string>('adminPassword', 'currentPassword');
@@ -245,18 +279,26 @@ const App: React.FC = () => {
     };
 
     const handleCreateInvoice = async (invoiceData: Omit<Invoice, 'id' | 'balance' | 'status' | 'createdAt' | 'payments'>) => {
-        const balance = invoiceData.price - invoiceData.amountPaid;
-        const status = balance <= 0 ? 'Pagada' : (invoiceData.amountPaid > 0 ? 'Abonada' : 'Pendiente');
+        const price = Number(invoiceData.price.toFixed(2));
+        const amountPaid = Number(invoiceData.amountPaid.toFixed(2));
+        const balance = Number((price - amountPaid).toFixed(2));
+        const status = balance <= 0 ? 'Pagada' : (amountPaid > 0 ? 'Abonada' : 'Pendiente');
         
-        const initialPayments: Payment[] = invoiceData.amountPaid > 0 ? [{ 
+        const initialPayments: Payment[] = amountPaid > 0 ? [{ 
             id: uuidv4(), 
             date: new Date().toISOString().split('T')[0], 
-            amount: invoiceData.amountPaid,
+            amount: amountPaid,
         }] : [];
 
         const newInvoice: Invoice = {
-            ...invoiceData, id: uuidv4(), balance, status, 
-            createdAt: new Date().toISOString(), payments: initialPayments
+            ...invoiceData,
+            price,
+            amountPaid,
+            id: uuidv4(),
+            balance,
+            status, 
+            createdAt: new Date().toISOString(),
+            payments: initialPayments
         };
         
         setInvoices(prev => [...prev, newInvoice]);
@@ -265,8 +307,21 @@ const App: React.FC = () => {
     };
 
     const handleUpdateInvoice = async (updatedInvoice: Invoice) => {
-        setInvoices(prev => prev.map(i => i.id === updatedInvoice.id ? updatedInvoice : i));
-        await db.putItem('invoices', updatedInvoice);
+        const price = Number(updatedInvoice.price.toFixed(2));
+        const amountPaid = Number(updatedInvoice.amountPaid.toFixed(2));
+        const balance = Number((price - amountPaid).toFixed(2));
+        const status = balance <= 0 ? 'Pagada' : (amountPaid > 0 ? 'Abonada' : 'Pendiente');
+
+        const refinedInvoice = {
+            ...updatedInvoice,
+            price,
+            amountPaid,
+            balance,
+            status
+        };
+
+        setInvoices(prev => prev.map(i => i.id === refinedInvoice.id ? refinedInvoice : i));
+        await db.putItem('invoices', refinedInvoice);
         addNotification('Factura actualizada.');
     };
 
@@ -280,10 +335,15 @@ const App: React.FC = () => {
         let invoiceToUpdate: Invoice | undefined;
         setInvoices(prev => prev.map(inv => {
             if (inv.id === invoiceId) {
-                const newPayment: Payment = { ...paymentData, id: uuidv4() };
+                const roundedPaymentAmount = Number(paymentData.amount.toFixed(2));
+                const newPayment: Payment = { 
+                    ...paymentData, 
+                    amount: roundedPaymentAmount, 
+                    id: uuidv4() 
+                };
                 const updatedPayments = [...(inv.payments || []), newPayment];
-                const newAmountPaid = inv.amountPaid + paymentData.amount;
-                const newBalance = inv.price - newAmountPaid;
+                const newAmountPaid = Number((inv.amountPaid + roundedPaymentAmount).toFixed(2));
+                const newBalance = Number((inv.price - newAmountPaid).toFixed(2));
                 const newStatus: Invoice['status'] = newBalance <= 0 ? 'Pagada' : 'Abonada';
                 invoiceToUpdate = { ...inv, amountPaid: newAmountPaid, balance: newBalance, status: newStatus, payments: updatedPayments };
                 return invoiceToUpdate;
@@ -322,10 +382,34 @@ const App: React.FC = () => {
         addNotification('Pago a gerente registrado.');
     };
 
+    const handleAddSpecialistPayout = async (data: Omit<SpecialistPayout, 'id'>) => {
+        const newPayout = { ...data, id: uuidv4() };
+        setSpecialistPayouts(prev => [...prev, newPayout]);
+        await db.putItem('specialistPayouts', newPayout);
+        addNotification('Pago a especialista registrado.');
+        
+        // Also register as expense automatically
+        const newExpense: Expense = { 
+            id: uuidv4(), 
+            description: `Abono a especialista`, 
+            amount: data.amount, 
+            type: 'Variable', 
+            date: data.date 
+        };
+        setExpenses(prev => [...prev, newExpense]);
+        await db.putItem('expenses', newExpense);
+    };
+
     const handleSaveTicketConfig = async (config: TicketConfig) => {
         setTicketConfig(config);
         await db.putSingleItem('ticketConfig', 'currentConfig', config);
         addNotification('Configuración de ticket guardada.');
+    };
+
+    const handleSaveWhatsappTemplates = async (templates: WhatsAppTemplate[]) => {
+        setWhatsappTemplates(templates);
+        await db.putSingleItem('ticketConfig', 'whatsappTemplates', templates);
+        addNotification('Plantillas de WhatsApp guardadas.');
     };
 
      const handleAddExpense = async (data: Omit<Expense, 'id'>) => {
@@ -457,6 +541,7 @@ const App: React.FC = () => {
             services: await db.getStoreData('services'),
             invoices: await db.getStoreData('invoices'),
             specialists: await db.getStoreData('specialists'),
+            specialistPayouts: await db.getStoreData('specialistPayouts'),
             managers: await db.getStoreData('managers'),
             managerPayouts: await db.getStoreData('managerPayouts'),
             expenses: await db.getStoreData('expenses'),
@@ -465,13 +550,37 @@ const App: React.FC = () => {
             ticketConfig: await db.getSingleItem('ticketConfig', 'currentConfig') || {},
         };
         const dataStr = JSON.stringify(allData, null, 2);
+        const fileName = `sensory-manager-backup-${new Date().toISOString().split('T')[0]}.json`;
         const blob = new Blob([dataStr], { type: 'application/json' });
+        
+        // Try to use native share API (for Android cloud save feature)
+        const isIframe = window !== window.top;
+        if (!isIframe && navigator.share && navigator.canShare) {
+            const file = new File([blob], fileName, { type: 'application/json' });
+            try {
+                 await navigator.share({
+                     files: [file],
+                     title: 'Respaldo Base de Datos',
+                     text: 'Copia de seguridad de la base de datos del centro médico.'
+                 });
+                 localStorage.setItem('sensory-manager-last-backup', new Date().toISOString().split('T')[0]);
+                 addNotification('Datos protegidos y exportados a la nube.');
+                 return;
+            } catch (err: any) {
+                 if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
+                     console.warn("Share failed, falling back to download", err);
+                 }
+            }
+        }
+        
+        // Fallback for desktop/unsupported browsers
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `sensory-manager-backup-${new Date().toISOString().split('T')[0]}.json`;
+        link.download = fileName;
         link.click();
         URL.revokeObjectURL(url);
+        localStorage.setItem('sensory-manager-last-backup', new Date().toISOString().split('T')[0]);
         addNotification('Datos exportados exitosamente.');
     };
 
@@ -483,6 +592,7 @@ const App: React.FC = () => {
                 db.saveAllData('services', data.services || []),
                 db.saveAllData('invoices', data.invoices || []),
                 db.saveAllData('specialists', data.specialists || []),
+                db.saveAllData('specialistPayouts', data.specialistPayouts || []),
                 db.saveAllData('managers', data.managers || []),
                 db.saveAllData('managerPayouts', data.managerPayouts || []),
                 db.saveAllData('expenses', data.expenses || []),
@@ -572,9 +682,9 @@ const App: React.FC = () => {
         
         switch (activePage) {
             case 'dashboard':
-                return <DashboardView clients={clients} invoices={invoices} expenses={expenses} services={services} appointments={appointments} />;
+                return <DashboardView clients={clients} invoices={invoices} expenses={expenses} services={services} appointments={appointments} onNavigateToClient={handleNavigateToClient} />;
             case 'clients':
-                return <ClientsView clients={clients} invoices={invoices} medicalRecords={medicalRecords} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} />;
+                return <ClientsView clients={clients} invoices={invoices} medicalRecords={medicalRecords} appointments={appointments} whatsappTemplates={whatsappTemplates} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} initialSelectedClientId={targetClientId} onClearSelection={() => setTargetClientId(null)} />;
             case 'services':
                 return <ServicesView services={services} invoices={invoices} onAddService={handleAddService} onUpdateService={handleUpdateService} onDeleteService={handleDeleteService} />;
             case 'invoicing':
@@ -586,11 +696,11 @@ const App: React.FC = () => {
             case 'medicalHistory':
                 return <MedicalHistoryView clients={clients} medicalRecords={medicalRecords} invoices={invoices} specialists={specialists} currentUser={currentUser!} onAddMedicalRecordEntry={onAddMedicalRecordEntry} onUpdateMedicalRecordEntry={onUpdateMedicalRecordEntry} onDeleteMedicalRecordEntry={onDeleteMedicalRecordEntry} />;
             case 'specialists':
-                return <SpecialistsView specialists={specialists} services={services} onAddSpecialist={handleAddSpecialist} onUpdateSpecialist={handleUpdateSpecialist} onDeleteSpecialist={handleDeleteSpecialist} onExportForSpecialist={onExportForSpecialist} />;
+                return <SpecialistsView specialists={specialists} services={services} invoices={invoices} specialistPayouts={specialistPayouts} onAddSpecialist={handleAddSpecialist} onUpdateSpecialist={handleUpdateSpecialist} onDeleteSpecialist={handleDeleteSpecialist} onExportForSpecialist={onExportForSpecialist} onAddPayout={handleAddSpecialistPayout} />;
             case 'managers':
                 return <ManagersView managers={managers} invoices={invoices} managerPayouts={managerPayouts} clients={clients} onAddManager={handleAddManager} onUpdateManager={handleUpdateManager} onDeleteManager={handleDeleteManager} onAddPayout={handleAddManagerPayout} />;
             case 'management':
-                return <ManagementView initialConfig={ticketConfig} onSave={handleSaveTicketConfig} onExport={handleExportData} onImport={handleImportData} onImportSpecialistData={handleImportSpecialistData} onUpdateAdminPassword={handleUpdateAdminPassword} />;
+                return <ManagementView initialConfig={ticketConfig} whatsappTemplates={whatsappTemplates} onSave={handleSaveTicketConfig} onSaveTemplates={handleSaveWhatsappTemplates} onExport={handleExportData} onImport={handleImportData} onImportSpecialistData={handleImportSpecialistData} onUpdateAdminPassword={handleUpdateAdminPassword} />;
             case 'reports':
                 return <ReportsView clients={clients} invoices={invoices} specialists={specialists} services={services} expenses={expenses} />;
             case 'calendar':
@@ -632,6 +742,7 @@ const App: React.FC = () => {
     return (
         <div className="flex">
             <Notifications notifications={notifications} onDismiss={dismissNotification} />
+            <AutoBackupModal isOpen={isAutoBackupModalOpen} onBackup={() => handleExportData()} onDismiss={() => setIsAutoBackupModalOpen(false)} />
             {currentUser.role === 'admin' && (
                 <Sidebar
                     activePage={activePage}

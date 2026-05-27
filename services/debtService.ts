@@ -20,7 +20,7 @@ export const calculateAllDebts = (clients: Client[], invoices: Invoice[]): DebtI
             }
 
             if (debtMap[invoice.clientId]) {
-                debtMap[invoice.clientId].totalDebt += invoice.balance;
+                debtMap[invoice.clientId].totalDebt = Number((debtMap[invoice.clientId].totalDebt + invoice.balance).toFixed(2));
                 debtMap[invoice.clientId].pendingInvoices.push(invoice);
             }
         }
@@ -36,7 +36,7 @@ export const calculateDebtForClient = (client: Client, invoices: Invoice[]): Deb
         return null;
     }
 
-    const totalDebt = clientInvoices.reduce((sum, inv) => sum + inv.balance, 0);
+    const totalDebt = Number(clientInvoices.reduce((sum, inv) => sum + inv.balance, 0).toFixed(2));
 
     return {
         client,

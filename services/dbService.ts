@@ -1,12 +1,12 @@
 import { User } from '../types.ts';
 
 const DB_NAME = 'SensoryManagerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Define all object store names
 const STORE_NAMES = [
     'clients', 'services', 'invoices', 'specialists', 'managers', 
-    'managerPayouts', 'expenses', 'medicalRecords', 'appointments', 
+    'managerPayouts', 'specialistPayouts', 'expenses', 'medicalRecords', 'appointments', 
     'ticketConfig', 'user', 'adminPassword'
 ];
 

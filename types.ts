@@ -4,6 +4,7 @@ export interface Client {
     patientName: string;
     representativeId?: string;
     patientDob?: string;
+    phone?: string;
     createdAt: string;
 }
 
@@ -62,6 +63,14 @@ export interface Manager {
     name: string;
 }
 
+export interface SpecialistPayout {
+    id: string;
+    specialistId: string;
+    amount: number;
+    date: string; // YYYY-MM-DD
+    notes?: string;
+}
+
 export interface ManagerPayout {
     id:string;
     managerId: string;
@@ -80,6 +89,8 @@ export interface MedicalRecordEntry {
     therapistNotes?: string;
     specialistId?: string; // ID of the specialist who created the entry
     image?: string; // base64 data URL
+    pdf?: string; // base64 PDF data URL
+    pdfName?: string; // original PDF file name
 }
 
 export interface MedicalReportData {
@@ -98,6 +109,12 @@ export interface TicketConfig {
     email?: string;
     additionalInfo?: string; // Bank details, etc.
     footer?: string; // Thank you message
+}
+
+export interface WhatsAppTemplate {
+    id: string;
+    title: string;
+    template: string;
 }
 
 export interface Appointment {

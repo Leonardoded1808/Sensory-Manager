@@ -1,0 +1,95 @@
+63-    const [clients, setClients] = useState<Client[]>([]);
+64-    const [services, setServices] = useState<Service[]>([]);
+65-    const [invoices, setInvoices] = useState<Invoice[]>([]);
+66-    const [specialists, setSpecialists] = useState<Specialist[]>([]);
+67-    const [managers, setManagers] = useState<Manager[]>([]);
+68:    const [managerPayouts, setManagerPayouts] = useState<ManagerPayout[]>([]);
+69-    const [expenses, setExpenses] = useState<Expense[]>([]);
+70-    const [medicalRecords, setMedicalRecords] = useState<MedicalRecordEntry[]>([]);
+71-    const [appointments, setAppointments] = useState<Appointment[]>([]);
+72-    const [ticketConfig, setTicketConfig] = useState<TicketConfig>({});
+73-    const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsAppTemplate[]>([]);
+--
+98-                        const clientsData = JSON.parse(lsClients);
+99-                        const servicesData = JSON.parse(localStorage.getItem('sensory-manager-services') || '[]');
+100-                        const invoicesData = JSON.parse(localStorage.getItem('sensory-manager-invoices') || '[]');
+101-                        const specialistsData = JSON.parse(localStorage.getItem('sensory-manager-specialists') || '[]');
+102-                        const managersData = JSON.parse(localStorage.getItem('sensory-manager-managers') || '[]');
+103:                        const managerPayoutsData = JSON.parse(localStorage.getItem('sensory-manager-manager-payouts') || '[]');
+104-                        const expensesData = JSON.parse(localStorage.getItem('sensory-manager-expenses') || '[]');
+105-                        const medicalRecordsData = JSON.parse(localStorage.getItem('sensory-manager-medical-records') || '[]');
+106-                        const appointmentsData = JSON.parse(localStorage.getItem('sensory-manager-appointments') || '[]');
+107-                        const ticketConfigData = JSON.parse(localStorage.getItem('sensory-manager-ticket-config') || '{}');
+108-                        const userData = JSON.parse(localStorage.getItem('sensory-manager-user') || 'null');
+--
+112-                        await db.saveAllData('clients', clientsData);
+113-                        await db.saveAllData('services', servicesData);
+114-                        await db.saveAllData('invoices', invoicesData);
+115-                        await db.saveAllData('specialists', specialistsData);
+116-                        await db.saveAllData('managers', managersData);
+117:                        await db.saveAllData('managerPayouts', managerPayoutsData);
+118-                        await db.saveAllData('expenses', expensesData);
+119-                        await db.saveAllData('medicalRecords', medicalRecordsData);
+120-                        await db.saveAllData('appointments', appointmentsData);
+121-                        await db.putSingleItem('ticketConfig', 'currentConfig', ticketConfigData);
+122-                        if(userData) await db.putSingleItem('user', 'currentUser', userData);
+--
+150-                setClients(clientsData);
+151-                setServices(await db.getStoreData<Service>('services'));
+152-                setInvoices(await db.getStoreData<Invoice>('invoices'));
+153-                setSpecialists(await db.getStoreData<Specialist>('specialists'));
+154-                setManagers(await db.getStoreData<Manager>('managers'));
+155:                setManagerPayouts(await db.getStoreData<ManagerPayout>('managerPayouts'));
+156-                setExpenses(await db.getStoreData<Expense>('expenses'));
+157-                setMedicalRecords(await db.getStoreData<MedicalRecordEntry>('medicalRecords'));
+158-                setAppointments(await db.getStoreData<Appointment>('appointments'));
+159-                setTicketConfig(await db.getSingleItem<TicketConfig>('ticketConfig', 'currentConfig') || {});
+160-                
+--
+374-    };
+375-
+376-    const handleAddManagerPayout = async (data: Omit<ManagerPayout, 'id'>) => {
+377-        const newPayout = { ...data, id: uuidv4() };
+378-        setManagerPayouts(prev => [...prev, newPayout]);
+379:        await db.putItem('managerPayouts', newPayout);
+380-        addNotification('Pago a gerente registrado.');
+381-    };
+382-
+383-    const handleSaveTicketConfig = async (config: TicketConfig) => {
+384-        setTicketConfig(config);
+--
+520-            clients: await db.getStoreData('clients'),
+521-            services: await db.getStoreData('services'),
+522-            invoices: await db.getStoreData('invoices'),
+523-            specialists: await db.getStoreData('specialists'),
+524-            managers: await db.getStoreData('managers'),
+525:            managerPayouts: await db.getStoreData('managerPayouts'),
+526-            expenses: await db.getStoreData('expenses'),
+527-            medicalRecords: await db.getStoreData('medicalRecords'),
+528-            appointments: await db.getStoreData('appointments'),
+529-            ticketConfig: await db.getSingleItem('ticketConfig', 'currentConfig') || {},
+530-        };
+--
+570-                db.saveAllData('clients', data.clients || []),
+571-                db.saveAllData('services', data.services || []),
+572-                db.saveAllData('invoices', data.invoices || []),
+573-                db.saveAllData('specialists', data.specialists || []),
+574-                db.saveAllData('managers', data.managers || []),
+575:                db.saveAllData('managerPayouts', data.managerPayouts || []),
+576-                db.saveAllData('expenses', data.expenses || []),
+577-                db.saveAllData('medicalRecords', data.medicalRecords || []),
+578-                db.saveAllData('appointments', data.appointments || []),
+579-                db.putSingleItem('ticketConfig', 'currentConfig', data.ticketConfig || {}),
+580-            ]);
+--
+674-            case 'medicalHistory':
+675-                return <MedicalHistoryView clients={clients} medicalRecords={medicalRecords} invoices={invoices} specialists={specialists} currentUser={currentUser!} onAddMedicalRecordEntry={onAddMedicalRecordEntry} onUpdateMedicalRecordEntry={onUpdateMedicalRecordEntry} onDeleteMedicalRecordEntry={onDeleteMedicalRecordEntry} />;
+676-            case 'specialists':
+677-                return <SpecialistsView specialists={specialists} services={services} onAddSpecialist={handleAddSpecialist} onUpdateSpecialist={handleUpdateSpecialist} onDeleteSpecialist={handleDeleteSpecialist} onExportForSpecialist={onExportForSpecialist} />;
+678-            case 'managers':
+679:                return <ManagersView managers={managers} invoices={invoices} managerPayouts={managerPayouts} clients={clients} onAddManager={handleAddManager} onUpdateManager={handleUpdateManager} onDeleteManager={handleDeleteManager} onAddPayout={handleAddManagerPayout} />;
+680-            case 'management':
+681-                return <ManagementView initialConfig={ticketConfig} whatsappTemplates={whatsappTemplates} onSave={handleSaveTicketConfig} onSaveTemplates={handleSaveWhatsappTemplates} onExport={handleExportData} onImport={handleImportData} onImportSpecialistData={handleImportSpecialistData} onUpdateAdminPassword={handleUpdateAdminPassword} />;
+682-            case 'reports':
+683-                return <ReportsView clients={clients} invoices={invoices} specialists={specialists} services={services} expenses={expenses} />;
+684-            case 'calendar':

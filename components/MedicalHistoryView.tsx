@@ -25,15 +25,65 @@ export const MedicalEntryForm: React.FC<{
 }> = ({ onClose, onSubmit, initialData }) => {
     const [imagePreview, setImagePreview] = useState<string | null>(initialData?.image || null);
     const [base64Image, setBase64Image] = useState<string | null>(initialData?.image || null);
+    
+    const [pdfPreview, setPdfPreview] = useState<string | null>(initialData?.pdf || null);
+    const [base64Pdf, setBase64Pdf] = useState<string | null>(initialData?.pdf || null);
+    const [pdfName, setPdfName] = useState<string | null>(initialData?.pdfName || null);
+    const [fileError, setFileError] = useState<string | null>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                setFileError("La imagen es muy grande (Máx 5MB).");
+                return;
+            }
+            setFileError(null);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const max_size = 800; // compress for mobile and speed
+                    if (width > height && width > max_size) {
+                        height *= max_size / width;
+                        width = max_size;
+                    } else if (height > max_size) {
+                        width *= max_size / height;
+                        height = max_size;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const result = canvas.toDataURL('image/jpeg', 0.6); // 60% quality JPEG
+                        setImagePreview(result);
+                        setBase64Image(result);
+                    }
+                };
+                img.src = reader.result as string;
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (file.size > 3 * 1024 * 1024) {
+                setFileError("El documento PDF es muy grande para datos móviles (Máx 3MB).");
+                return;
+            }
+            setFileError(null);
             const reader = new FileReader();
             reader.onloadend = () => {
                 const result = reader.result as string;
-                setImagePreview(result);
-                setBase64Image(result);
+                setPdfPreview(result);
+                setBase64Pdf(result);
+                setPdfName(file.name);
             };
             reader.readAsDataURL(file);
         }
@@ -49,6 +99,8 @@ export const MedicalEntryForm: React.FC<{
             achievementStatus: formData.get('achievementStatus') as 'Logrado' | 'En Progreso' | 'No Logrado',
             therapistNotes: formData.get('therapistNotes') as string,
             image: base64Image || undefined,
+            pdf: base64Pdf || undefined,
+            pdfName: pdfName || undefined,
         };
         
         if (initialData) {
@@ -59,49 +111,100 @@ export const MedicalEntryForm: React.FC<{
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 text-gray-900">
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Fecha</label>
-                <input type="date" name="date" defaultValue={initialData?.date || new Date().toISOString().split('T')[0]} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{colorScheme: 'dark'}} required />
+                <label className="block text-sm font-bold text-gray-700 mb-1">Fecha de la Sesión</label>
+                <input 
+                    type="date" 
+                    name="date" 
+                    defaultValue={initialData?.date || new Date().toISOString().split('T')[0]} 
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-base" 
+                    style={{colorScheme: 'light'}} 
+                    required 
+                />
             </div>
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Actividad Realizada</label>
-                <textarea name="activityDescription" rows={2} defaultValue={initialData?.activityDescription} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-400" required />
+                <label className="block text-sm font-bold text-gray-700 mb-1">Actividad Realizada</label>
+                <textarea 
+                    name="activityDescription" 
+                    rows={2} 
+                    defaultValue={initialData?.activityDescription} 
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white placeholder-gray-400 text-base" 
+                    placeholder="Ej: Ejercicios de integración sensorial táctil con texturas."
+                    required 
+                />
             </div>
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Hitos Esperados</label>
-                <textarea name="expectedMilestones" rows={2} defaultValue={initialData?.expectedMilestones} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-400" required />
+                <label className="block text-sm font-bold text-gray-700 mb-1">Hitos Esperados</label>
+                <textarea 
+                    name="expectedMilestones" 
+                    rows={2} 
+                    defaultValue={initialData?.expectedMilestones} 
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white placeholder-gray-400 text-base" 
+                    placeholder="Ej: Tolerar texturas rugosas sin presentar hipersensibilidad durante 5 minutos."
+                    required 
+                />
             </div>
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Estado del Logro</label>
-                <select name="achievementStatus" defaultValue={initialData?.achievementStatus} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <label className="block text-sm font-bold text-gray-700 mb-1">Estado del Logro</label>
+                <select 
+                    name="achievementStatus" 
+                    defaultValue={initialData?.achievementStatus} 
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-base"
+                >
                     <option value="Logrado">Logrado</option>
                     <option value="En Progreso">En Progreso</option>
                     <option value="No Logrado">No Logrado</option>
                 </select>
             </div>
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Notas del Terapeuta</label>
-                <textarea name="therapistNotes" rows={3} defaultValue={initialData?.therapistNotes} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-400" />
+                <label className="block text-sm font-bold text-gray-700 mb-1">Notas del Terapeuta</label>
+                <textarea 
+                    name="therapistNotes" 
+                    rows={3} 
+                    defaultValue={initialData?.therapistNotes} 
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white placeholder-gray-400 text-base" 
+                    placeholder="Detalles adicionales sobre el comportamiento, respuestas y observaciones clínicas del paciente durante la consulta..."
+                />
             </div>
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Anexar Imagen (Opcional)</label>
-                <div className="mt-1 flex items-center space-x-4 p-3 bg-slate-700 border border-slate-600 rounded-lg">
+                <label className="block text-sm font-bold text-gray-700 mb-1">Anexar Imagen de Evidencia (Opcional)</label>
+                <div className="mt-1 flex items-center space-x-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                     {imagePreview && (
-                        <img src={imagePreview} alt="Preview" className="h-16 w-16 rounded-lg object-cover" />
+                        <img src={imagePreview} alt="Evidencia" className="h-16 w-16 rounded-lg object-cover border border-gray-300" />
                     )}
-                    <label htmlFor="image-upload" className="cursor-pointer bg-slate-600 py-2 px-3 border border-slate-500 rounded-md text-sm font-medium text-gray-200 hover:bg-slate-500">
-                        <span>{imagePreview ? 'Cambiar' : 'Seleccionar Archivo'}</span>
+                    <label htmlFor="image-upload" className="cursor-pointer bg-white py-2 px-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+                        <span>{imagePreview ? 'Cambiar Imagen' : 'Seleccionar Imagen'}</span>
                         <input id="image-upload" name="image-upload" type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
                     </label>
                     {imagePreview && (
-                        <button type="button" onClick={() => { setImagePreview(null); setBase64Image(null); }} className="text-sm text-red-400 hover:text-red-300">Quitar</button>
+                        <button type="button" onClick={() => { setImagePreview(null); setBase64Image(null); }} className="text-sm text-red-600 hover:text-red-850 font-semibold">Eliminar</button>
                     )}
                 </div>
             </div>
-            <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={onClose} className="px-6 py-3 bg-slate-600 text-gray-200 font-bold rounded-lg hover:bg-slate-500">Cancelar</button>
-                <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">Guardar Entrada</button>
+            <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Anexar PDF (Informes/Exámenes)</label>
+                <div className="mt-1 flex items-center space-x-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    {pdfPreview && (
+                        <div className="text-blue-600 truncate flex-1 text-sm font-medium">{pdfName || 'Documento PDF'}</div>
+                    )}
+                    <label htmlFor="pdf-upload" className="cursor-pointer bg-white py-2 px-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors shrink-0">
+                        <span>{pdfPreview ? 'Cambiar PDF' : 'Seleccionar PDF'}</span>
+                        <input id="pdf-upload" name="pdf-upload" type="file" className="sr-only" accept="application/pdf" onChange={handlePdfChange} />
+                    </label>
+                    {pdfPreview && (
+                        <button type="button" onClick={() => { setPdfPreview(null); setBase64Pdf(null); setPdfName(null); }} className="text-sm text-red-600 hover:text-red-850 font-semibold shrink-0">Eliminar</button>
+                    )}
+                </div>
+            </div>
+            {fileError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-semibold rounded-lg">
+                    {fileError}
+                </div>
+            )}
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                <button type="button" onClick={onClose} className="px-6 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200 transition-colors">Cancelar</button>
+                <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors">Guardar Entrada</button>
             </div>
         </form>
     );
@@ -115,23 +218,23 @@ const GenerateReportModal: React.FC<{onClose: () => void; onGenerate: (instructi
     };
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 text-gray-950">
             <div>
-                <label className="block text-sm font-bold text-gray-300 mb-1">Instrucciones Adicionales (Opcional)</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Instrucciones Adicionales para la IA (Opcional)</label>
                 <textarea 
                     value={instructions}
                     onChange={(e) => setInstructions(e.target.value)}
                     rows={4} 
-                    className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-400" 
-                    placeholder="Ej: Enfocarse en el progreso motor de las últimas 4 semanas."
+                    className="w-full p-3 bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white placeholder-gray-400 text-base" 
+                    placeholder="Ej: Describir con rigor académico y lenguaje clínico el progreso en motricidad fina, enfocándose en la evolución de las últimas 5 sesiones."
                 />
-                 <p className="text-xs text-gray-400 mt-1">Aquí puede darle indicaciones a la IA para que el informe sea más específico.</p>
+                 <p className="text-xs text-gray-500 mt-1">Aquí puede orientar a la IA para focalizar el informe en hitos específicos registrados por los terapistas.</p>
             </div>
-            <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={onClose} className="px-6 py-3 bg-slate-600 text-gray-200 font-bold rounded-lg hover:bg-slate-500" disabled={isGenerating}>Cancelar</button>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                <button type="button" onClick={onClose} className="px-6 py-3 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200" disabled={isGenerating}>Cancelar</button>
                 <button type="button" onClick={handleSubmit} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 flex items-center space-x-2 disabled:bg-purple-300" disabled={isGenerating}>
                     <SparkleIcon className="w-5 h-5"/>
-                    <span>{isGenerating ? 'Generando...' : 'Generar Informe'}</span>
+                    <span>{isGenerating ? 'Generando...' : 'Generar Informe Clínico'}</span>
                 </button>
             </div>
         </div>
@@ -306,6 +409,15 @@ const MedicalHistoryDetailView: React.FC<{
                                         <button onClick={() => setViewingImage(record.image!)} className="mt-2 rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-blue-500 ring-offset-2">
                                             <img src={record.image} alt="Anexo de historial médico" className="max-w-full h-auto md:max-w-xs cursor-pointer hover:opacity-80 transition-opacity" />
                                         </button>
+                                    </div>
+                                )}
+                                {record.pdf && (
+                                    <div className="mt-3 pt-3 border-t border-gray-200">
+                                        <h4 className="font-semibold text-gray-800">PDF Anexo:</h4>
+                                        <a href={record.pdf} download={record.pdfName || 'Documento.pdf'} className="mt-2 inline-flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                            <span>Descargar {record.pdfName || 'Documento PDF'}</span>
+                                        </a>
                                     </div>
                                 )}
                             </div>

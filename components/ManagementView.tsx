@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 // FIX: Add .ts extension to import path.
-import { TicketConfig } from '../types.ts';
+import { TicketConfig, WhatsAppTemplate } from '../types.ts';
 // FIX: Add .tsx extension to import path.
-import { DownloadIcon, UploadIcon, DatabaseIcon } from './icons.tsx';
+import { DownloadIcon, UploadIcon, DatabaseIcon, TrashIcon, AddIcon } from './icons.tsx';
 import { ConfirmationModal } from './Modal.tsx';
+import { v4 as uuidv4 } from 'uuid';
 
 const PasswordChangeForm: React.FC<{ onUpdateAdminPassword: (oldPass: string, newPass: string) => Promise<boolean>; }> = ({ onUpdateAdminPassword }) => {
     const [oldPassword, setOldPassword] = useState('');
@@ -58,15 +59,18 @@ const PasswordChangeForm: React.FC<{ onUpdateAdminPassword: (oldPass: string, ne
 
 interface ManagementViewProps {
     initialConfig: TicketConfig;
+    whatsappTemplates: WhatsAppTemplate[];
     onSave: (config: TicketConfig) => Promise<void>;
+    onSaveTemplates: (templates: WhatsAppTemplate[]) => Promise<void>;
     onExport: () => void;
     onImport: (data: string) => void;
     onImportSpecialistData: (data: string) => void;
     onUpdateAdminPassword: (oldPass: string, newPass: string) => Promise<boolean>;
 }
 
-const ManagementView: React.FC<ManagementViewProps> = ({ initialConfig, onSave, onExport, onImport, onImportSpecialistData, onUpdateAdminPassword }) => {
+const ManagementView: React.FC<ManagementViewProps> = ({ initialConfig, whatsappTemplates, onSave, onSaveTemplates, onExport, onImport, onImportSpecialistData, onUpdateAdminPassword }) => {
     const [config, setConfig] = useState<TicketConfig>(initialConfig);
+    const [templates, setTemplates] = useState<WhatsAppTemplate[]>(whatsappTemplates);
     const [logoPreview, setLogoPreview] = useState<string | undefined>(initialConfig.logo);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -143,6 +147,24 @@ const ManagementView: React.FC<ManagementViewProps> = ({ initialConfig, onSave, 
         setPendingSpecialistImportData(null);
     };
 
+    const handleAddTemplate = () => {
+        setTemplates([...templates, { id: uuidv4(), title: 'Nueva Plantilla', template: '' }]);
+    };
+
+    const handleTemplateChange = (id: string, field: keyof WhatsAppTemplate, value: string) => {
+        setTemplates(templates.map(t => t.id === id ? { ...t, [field]: value } : t));
+    };
+
+    const handleDeleteTemplate = (id: string) => {
+        setTemplates(templates.filter(t => t.id !== id));
+    };
+
+    const handleSaveTemplatesClick = async () => {
+        setIsSaving(true);
+        await onSaveTemplates(templates);
+        setIsSaving(false);
+    };
+
     return (
         <div className="p-5 animate-fadeIn space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-md">
@@ -206,6 +228,46 @@ const ManagementView: React.FC<ManagementViewProps> = ({ initialConfig, onSave, 
                 </form>
             </div>
             
+            <div className="bg-white p-6 rounded-xl shadow-md">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Plantillas de WhatsApp</h3>
+                <p className="text-sm text-gray-500 mb-6">Configure los mensajes predeterminados para enviar a los pacientes. Variables disponibles: {"{{representante}}, {{paciente}}, {{fecha}}, {{hora}}"}</p>
+                
+                <div className="space-y-4">
+                    {templates.map((template) => (
+                        <div key={template.id} className="border border-gray-200 p-4 rounded-xl relative">
+                            <div className="flex justify-between items-start mb-2">
+                                <input
+                                    type="text"
+                                    value={template.title}
+                                    onChange={(e) => handleTemplateChange(template.id, 'title', e.target.value)}
+                                    placeholder="Título (Ej. Recordatorio, Cumpleaños...)"
+                                    className="font-bold text-gray-800 border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 p-2 rounded-lg text-base w-full shadow-sm mr-2"
+                                />
+                                <button type="button" onClick={() => handleDeleteTemplate(template.id)} className="text-red-500 p-1 hover:bg-red-50 rounded">
+                                    <TrashIcon className="w-5 h-5"/>
+                                </button>
+                            </div>
+                            <textarea
+                                value={template.template}
+                                onChange={(e) => handleTemplateChange(template.id, 'template', e.target.value)}
+                                rows={3}
+                                className="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded p-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Escriba su mensaje aquí..."
+                            />
+                        </div>
+                    ))}
+                </div>
+
+                <div className="mt-4 flex justify-between items-center">
+                    <button type="button" onClick={handleAddTemplate} className="flex items-center space-x-2 text-blue-600 font-semibold hover:bg-blue-50 py-2 px-3 rounded-lg transition-colors">
+                        <AddIcon className="w-5 h-5"/> <span>Añadir Plantilla</span>
+                    </button>
+                    <button type="button" onClick={handleSaveTemplatesClick} disabled={isSaving} className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-bold rounded-lg text-white bg-green-600 hover:bg-green-700 disabled:bg-green-300">
+                        {isSaving ? 'Guardando...' : 'Guardar Plantillas'}
+                    </button>
+                </div>
+            </div>
+
             <div className="bg-white p-6 rounded-xl shadow-md">
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Cambiar Contraseña de Administrador</h3>
                 <PasswordChangeForm onUpdateAdminPassword={onUpdateAdminPassword} />
