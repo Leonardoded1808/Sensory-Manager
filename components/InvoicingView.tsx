@@ -425,14 +425,14 @@ const InvoicingView: React.FC<InvoicingViewProps> = ({ clients, services, invoic
         let y = margin;
     
         // 1. Header
+        const logoWidth = 25;
         if (ticketConfig.logo) {
             try {
                 const img = new Image();
                 img.src = ticketConfig.logo;
                 const aspectRatio = img.width / img.height;
-                const logoWidth = 25;
                 const logoHeight = logoWidth / aspectRatio;
-                doc.addImage(ticketConfig.logo, 'PNG', margin, y, logoWidth, logoHeight);
+                doc.addImage(ticketConfig.logo, 'PNG', pageW - margin - logoWidth, y, logoWidth, logoHeight);
             } catch (e) {
                 console.error("Error adding logo to PDF", e);
             }
@@ -440,16 +440,16 @@ const InvoicingView: React.FC<InvoicingViewProps> = ({ clients, services, invoic
     
         doc.setFontSize(10);
         doc.setTextColor(80, 80, 80);
-        const companyX = pageW - margin;
-        if (ticketConfig.companyName) doc.text(ticketConfig.companyName, companyX, y, { align: 'right' });
+        const companyX = margin;
+        if (ticketConfig.companyName) doc.text(ticketConfig.companyName, companyX, y, { align: 'left' });
         y += 5;
-        if (ticketConfig.companyId) doc.text(`RIF: ${ticketConfig.companyId}`, companyX, y, { align: 'right' });
+        if (ticketConfig.companyId) doc.text(`RIF: ${ticketConfig.companyId}`, companyX, y, { align: 'left' });
         y += 5;
-        if (ticketConfig.address) doc.text(ticketConfig.address, companyX, y, { align: 'right' });
+        if (ticketConfig.address) doc.text(ticketConfig.address, companyX, y, { align: 'left' });
         y += 5;
-        if (ticketConfig.phone) doc.text(`Tel: ${ticketConfig.phone}`, companyX, y, { align: 'right' });
+        if (ticketConfig.phone) doc.text(`Tel: ${ticketConfig.phone}`, companyX, y, { align: 'left' });
         y += 5;
-        if (ticketConfig.email) doc.text(ticketConfig.email, companyX, y, { align: 'right' });
+        if (ticketConfig.email) doc.text(ticketConfig.email, companyX, y, { align: 'left' });
     
         y = Math.max(y, margin + 30);
         doc.setLineWidth(0.5);

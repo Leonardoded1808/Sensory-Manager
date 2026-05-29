@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 // FIX: Add .ts extension to import path.
-import { TicketConfig, WhatsAppTemplate } from '../types.ts';
+import { TicketConfig, WhatsAppTemplate, Specialist } from '../types.ts';
 // FIX: Add .tsx extension to import path.
 import { DownloadIcon, UploadIcon, DatabaseIcon, TrashIcon, AddIcon } from './icons.tsx';
 import { ConfirmationModal } from './Modal.tsx';
@@ -60,19 +60,23 @@ const PasswordChangeForm: React.FC<{ onUpdateAdminPassword: (oldPass: string, ne
 interface ManagementViewProps {
     initialConfig: TicketConfig;
     whatsappTemplates: WhatsAppTemplate[];
+    specialists: Specialist[];
     onSave: (config: TicketConfig) => Promise<void>;
     onSaveTemplates: (templates: WhatsAppTemplate[]) => Promise<void>;
     onExport: () => void;
     onImport: (data: string) => void;
     onImportSpecialistData: (data: string) => void;
+    onExportSpecialistJSON: (id: string) => void;
     onUpdateAdminPassword: (oldPass: string, newPass: string) => Promise<boolean>;
 }
 
-const ManagementView: React.FC<ManagementViewProps> = ({ initialConfig, whatsappTemplates, onSave, onSaveTemplates, onExport, onImport, onImportSpecialistData, onUpdateAdminPassword }) => {
+const ManagementView: React.FC<ManagementViewProps> = ({ initialConfig, whatsappTemplates, specialists, onSave, onSaveTemplates, onExport, onImport, onImportSpecialistData, onExportSpecialistJSON, onUpdateAdminPassword }) => {
     const [config, setConfig] = useState<TicketConfig>(initialConfig);
     const [templates, setTemplates] = useState<WhatsAppTemplate[]>(whatsappTemplates);
     const [logoPreview, setLogoPreview] = useState<string | undefined>(initialConfig.logo);
     const [isSaving, setIsSaving] = useState(false);
+    
+    const [selectedExportSpecialistId, setSelectedExportSpecialistId] = useState<string>('');
     
     const backupFileInputRef = useRef<HTMLInputElement>(null);
     const specialistFileInputRef = useRef<HTMLInputElement>(null);
@@ -289,11 +293,41 @@ const ManagementView: React.FC<ManagementViewProps> = ({ initialConfig, whatsapp
 
             <div className="bg-white p-6 rounded-xl shadow-md">
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Datos de Especialistas</h3>
-                <p className="text-sm text-gray-500 mb-6">Importe los archivos de historial médico exportados por los especialistas para centralizar la información.</p>
-                <button onClick={() => handleImportClick('specialist')} className="w-full inline-flex justify-center items-center gap-2 py-3 px-4 border border-purple-300 shadow-sm text-sm font-bold rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100">
-                    <DatabaseIcon className="w-5 h-5"/> Importar Datos de Especialista
-                </button>
-                <input type="file" ref={specialistFileInputRef} onChange={(e) => handleImportFile(e, 'specialist')} accept=".json" className="hidden"/>
+                <p className="text-sm text-gray-500 mb-6">Importe los archivos de historial médico exportados por los especialistas, o exporte los datos para un especialista específico (incluirá pacientes y citas asignadas) sin sobreescribir datos anteriores de la plataforma.</p>
+                <div className="flex flex-col gap-4">
+                    <button onClick={() => handleImportClick('specialist')} className="w-full inline-flex justify-center items-center gap-2 py-3 px-4 border border-purple-300 shadow-sm text-sm font-bold rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100">
+                        <DatabaseIcon className="w-5 h-5"/> Importar Datos Recibidos de Especialista
+                    </button>
+                    <input type="file" ref={specialistFileInputRef} onChange={(e) => handleImportFile(e, 'specialist')} accept=".json" className="hidden"/>
+
+                    <div className="h-px bg-gray-200 w-full my-2"></div>
+
+                    <div className="flex flex-col md:flex-row gap-4 items-center mt-2">
+                        <select 
+                            value={selectedExportSpecialistId} 
+                            onChange={(e) => setSelectedExportSpecialistId(e.target.value)}
+                            className="w-full md:w-1/2 p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        >
+                            <option value="">Seleccione un especialista...</option>
+                            {specialists.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </select>
+                        <button 
+                            onClick={() => {
+                                if (selectedExportSpecialistId) {
+                                    onExportSpecialistJSON(selectedExportSpecialistId);
+                                    setSelectedExportSpecialistId('');
+                                } else {
+                                    alert('Debe seleccionar un especialista primero.');
+                                }
+                            }}
+                            className="w-full md:w-auto inline-flex justify-center items-center gap-2 py-3 px-6 border border-transparent shadow-sm text-sm font-bold rounded-lg text-white bg-blue-600 hover:bg-blue-700"
+                        >
+                            <DownloadIcon className="w-5 h-5"/> Exportar Datos para Especialista
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <ConfirmationModal isOpen={isBackupConfirmModalOpen} onClose={() => setBackupConfirmModalOpen(false)} onConfirm={confirmBackupImport} title="Confirmar Importación de Respaldo" message="¿Está seguro? Se sobrescribirán todos los datos actuales. Esta acción no se puede deshacer." confirmText="Sí, Importar Respaldo"/>

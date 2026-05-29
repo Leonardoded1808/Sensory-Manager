@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 // FIX: Add .ts extension to import path.
-import { Client, Invoice, MedicalRecordEntry, Specialist, User } from '../types.ts';
+import { Client, Invoice, MedicalRecordEntry, Specialist, User, TicketConfig } from '../types.ts';
 import Modal, { ConfirmationModal } from './Modal.tsx';
 // FIX: Add .tsx extension to import path.
-import { AddIcon, BackIcon, ChevronRightIcon, SparkleIcon, EditIcon, TrashIcon } from './icons.tsx';
+import { AddIcon, BackIcon, ChevronRightIcon, SparkleIcon, EditIcon, TrashIcon, PdfIcon } from './icons.tsx';
 // FIX: Add .ts extension to import path.
 import { generateMedicalReport } from '../services/geminiService.ts';
+import jsPDF from 'https://esm.sh/jspdf@2.5.1';
 
 
 const PatientListItem: React.FC<{ client: Client; onSelect: () => void }> = ({ client, onSelect }) => (
@@ -254,11 +255,12 @@ const MedicalHistoryDetailView: React.FC<{
     invoices: Invoice[];
     specialists: Specialist[];
     currentUser: User;
+    ticketConfig: TicketConfig;
     onBack: () => void; 
     onAddEntry: (data: Omit<MedicalRecordEntry, 'id' | 'clientId'>) => Promise<void>;
     onUpdateEntry: (entry: MedicalRecordEntry) => Promise<void>;
     onDeleteEntry: (entryId: string) => Promise<void>;
-}> = ({ client, records, invoices, specialists, currentUser, onBack, onAddEntry, onUpdateEntry, onDeleteEntry }) => {
+}> = ({ client, records, invoices, specialists, currentUser, ticketConfig, onBack, onAddEntry, onUpdateEntry, onDeleteEntry }) => {
     
     const [isEntryModalOpen, setEntryModalOpen] = useState(false);
     const [editingEntry, setEditingEntry] = useState<MedicalRecordEntry | null>(null);
@@ -270,6 +272,79 @@ const MedicalHistoryDetailView: React.FC<{
     const [error, setError] = useState<string | null>(null);
 
     const [viewingImage, setViewingImage] = useState<string | null>(null); // State for image viewer
+
+    const handleGenerateReportPdf = () => {
+        if (!report) return;
+        const doc = new jsPDF();
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const margin = 15;
+        let y = margin;
+    
+        // Header
+        const logoWidth = 25;
+        if (ticketConfig.logo) {
+            try {
+                const img = new Image();
+                img.src = ticketConfig.logo;
+                const aspectRatio = img.width / img.height;
+                const logoHeight = logoWidth / aspectRatio;
+                doc.addImage(ticketConfig.logo, 'PNG', pageW - margin - logoWidth, y, logoWidth, logoHeight);
+            } catch (e) {
+                console.error("Error adding logo to PDF", e);
+            }
+        }
+    
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        const companyX = margin;
+        if (ticketConfig.companyName) doc.text(ticketConfig.companyName, companyX, y, { align: 'left' });
+        y += 5;
+        if (ticketConfig.companyId) doc.text(`RIF: ${ticketConfig.companyId}`, companyX, y, { align: 'left' });
+        y += 5;
+        if (ticketConfig.address) doc.text(ticketConfig.address, companyX, y, { align: 'left' });
+        y += 5;
+        if (ticketConfig.phone) doc.text(`Tel: ${ticketConfig.phone}`, companyX, y, { align: 'left' });
+        y += 5;
+        if (ticketConfig.email) doc.text(ticketConfig.email, companyX, y, { align: 'left' });
+
+        y += 15;
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(200, 200, 200);
+        doc.line(margin, y, pageW - margin, y);
+        y += 10;
+
+        // Title
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "bold");
+        doc.text("INFORME MÉDICO", pageW / 2, y, { align: "center" });
+        y += 10;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Paciente: ${client.patientName}`, margin, y);
+        y += 5;
+        doc.text(`Fecha del Informe: ${new Date().toLocaleDateString()}`, margin, y);
+        y += 10;
+
+        // Report Content
+        doc.setFont("helvetica", "normal");
+        const lines = doc.splitTextToSize(report, pageW - 2 * margin);
+        
+        for (let i = 0; i < lines.length; i++) {
+            if (y > pageH - margin) {
+                doc.addPage();
+                y = margin;
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+            }
+            doc.text(lines[i], margin, y);
+            y += 5; // Adjust line height
+        }
+
+        doc.save(`Informe_Medico_${client.patientName.replace(/\s+/g, '_')}.pdf`);
+    };
 
     const specialistsMap = useMemo(() => new Map(specialists.map(s => [s.id, s.name])), [specialists]);
     const sortedRecords = useMemo(() => {
@@ -358,7 +433,22 @@ const MedicalHistoryDetailView: React.FC<{
                 </div>
             )}
             {error && <div className="my-4 text-center py-10 bg-red-50 p-4 rounded-xl shadow-md"><p className="text-lg font-semibold text-red-700">{error}</p></div>}
-            {report && <div className="my-4 bg-white p-6 rounded-xl shadow-md animate-fadeIn"><pre className="text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{report}</pre></div>}
+            {report && (
+                <div className="my-4 bg-white p-6 rounded-xl shadow-md animate-fadeIn flex flex-col gap-4">
+                    <div className="flex justify-between items-center">
+                        <h4 className="text-lg font-bold text-gray-800">Informe Generado</h4>
+                        <button onClick={handleGenerateReportPdf} className="bg-red-600 text-white px-3 py-2 rounded-lg shadow hover:bg-red-700 flex items-center space-x-2">
+                            <PdfIcon className="w-5 h-5"/>
+                            <span className="font-semibold text-sm">Descargar PDF</span>
+                        </button>
+                    </div>
+                    <textarea 
+                        className="w-full h-96 p-4 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 font-sans leading-relaxed text-gray-700 resize-y"
+                        value={report}
+                        onChange={(e) => setReport(e.target.value)}
+                    />
+                </div>
+            )}
 
 
             {sortedRecords.length > 0 ? (
@@ -483,12 +573,13 @@ interface MedicalHistoryViewProps {
     invoices: Invoice[];
     specialists: Specialist[];
     currentUser: User;
+    ticketConfig: TicketConfig;
     onAddMedicalRecordEntry: (entryData: Omit<MedicalRecordEntry, 'id'>) => Promise<void>;
     onUpdateMedicalRecordEntry: (entry: MedicalRecordEntry) => Promise<void>;
     onDeleteMedicalRecordEntry: (entryId: string) => Promise<void>;
 }
 
-const MedicalHistoryView: React.FC<MedicalHistoryViewProps> = ({ clients, medicalRecords, invoices, specialists, currentUser, onAddMedicalRecordEntry, onUpdateMedicalRecordEntry, onDeleteMedicalRecordEntry }) => {
+const MedicalHistoryView: React.FC<MedicalHistoryViewProps> = ({ clients, medicalRecords, invoices, specialists, currentUser, ticketConfig, onAddMedicalRecordEntry, onUpdateMedicalRecordEntry, onDeleteMedicalRecordEntry }) => {
     const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
     const selectedClient = clients.find(c => c.id === selectedClientId);
@@ -508,6 +599,7 @@ const MedicalHistoryView: React.FC<MedicalHistoryViewProps> = ({ clients, medica
                     invoices={invoices}
                     specialists={specialists}
                     currentUser={currentUser}
+                    ticketConfig={ticketConfig}
                     onBack={() => setSelectedClientId(null)} 
                     onAddEntry={handleAddEntry}
                     onUpdateEntry={onUpdateMedicalRecordEntry}

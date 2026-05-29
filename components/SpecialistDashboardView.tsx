@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Invoice, User, Appointment, Client, Specialist, MedicalRecordEntry } from '../types.ts';
+import React, { useState, useMemo, useRef } from 'react';
+import { Invoice, User, Appointment, Client, Specialist, MedicalRecordEntry, TicketConfig } from '../types.ts';
+import { DownloadIcon, DatabaseIcon } from './icons.tsx';
 import MedicalHistoryView from './MedicalHistoryView.tsx';
 import CalendarView from './CalendarView.tsx';
 import Notifications from './Notifications.tsx';
@@ -11,12 +12,15 @@ interface SpecialistDashboardViewProps {
     clients: Client[];
     specialists: Specialist[];
     medicalRecords: MedicalRecordEntry[];
+    ticketConfig: TicketConfig;
     onAddMedicalRecordEntry: (data: Omit<MedicalRecordEntry, 'id'>) => Promise<void>;
     onUpdateMedicalRecordEntry: (data: MedicalRecordEntry) => Promise<void>;
     onDeleteMedicalRecordEntry: (id: string) => Promise<void>;
     onAddAppointment: (newAppointments: Omit<Appointment, 'id'>[]) => Promise<void>;
     onUpdateAppointment: (updatedAppointment: Appointment, scope: 'single' | 'all') => Promise<void>;
     onDeleteAppointment: (appointmentId: string, scope: 'single' | 'all') => Promise<void>;
+    onImportSpecialistData: (data: string) => void;
+    onExportSpecialistJSON: (id: string) => void;
 }
 
 const StatCard: React.FC<{ title: string; value: string; subtext?: string; }> = ({ title, value, subtext }) => (
@@ -38,6 +42,22 @@ const SpecialistDashboardView: React.FC<SpecialistDashboardViewProps> = (props) 
     }
 
     const [activeTab, setActiveTab] = useState<SpecialistTab>('dashboard');
+    const specialistFileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const content = event.target?.result as string;
+                if (window.confirm("¿Importar datos actualizados de sus pacientes desde este archivo?")) {
+                    props.onImportSpecialistData(content);
+                }
+            };
+            reader.readAsText(file);
+        }
+        if (e.target) e.target.value = '';
+    };
 
     const specialistInvoices = useMemo(() => {
         return invoices.filter(inv => inv.specialistId === currentUser.id);
@@ -76,6 +96,21 @@ const SpecialistDashboardView: React.FC<SpecialistDashboardViewProps> = (props) 
                             <StatCard title="Servicios Facturados" value={String(stats.servicesProvided)} />
                             <StatCard title="Pacientes Asignados" value={String(stats.patientsAttended)} />
                         </div>
+                        <div className="bg-white p-6 rounded-xl shadow-md flex justify-between items-center">
+                            <div>
+                                <h3 className="font-bold text-gray-800">Sincronización de Datos</h3>
+                                <p className="text-sm text-gray-500">Exporte sus historiales clínicos o reciba actualizaciones de administrador</p>
+                            </div>
+                            <div className="flex gap-4">
+                                <button onClick={() => props.onExportSpecialistJSON(currentUser.id)} className="inline-flex justify-center items-center gap-2 py-2 px-4 border border-transparent shadow-sm text-sm font-bold rounded-lg text-white bg-blue-600 hover:bg-blue-700">
+                                    <DownloadIcon className="w-4 h-4"/> Exportar Datos
+                                </button>
+                                <button onClick={() => specialistFileInputRef.current?.click()} className="inline-flex justify-center items-center gap-2 py-2 px-4 border border-purple-300 shadow-sm text-sm font-bold rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100">
+                                    <DatabaseIcon className="w-4 h-4"/> Importar Actualización
+                                </button>
+                                <input type="file" ref={specialistFileInputRef} onChange={handleImportFile} accept=".json" className="hidden"/>
+                            </div>
+                        </div>
                         <Notifications 
                             services={[]} 
                             invoices={[]} 
@@ -93,6 +128,7 @@ const SpecialistDashboardView: React.FC<SpecialistDashboardViewProps> = (props) 
                             invoices={invoices}
                             specialists={specialists}
                             currentUser={currentUser}
+                            ticketConfig={props.ticketConfig}
                             onAddMedicalRecordEntry={props.onAddMedicalRecordEntry}
                             onUpdateMedicalRecordEntry={props.onUpdateMedicalRecordEntry}
                             onDeleteMedicalRecordEntry={props.onDeleteMedicalRecordEntry}

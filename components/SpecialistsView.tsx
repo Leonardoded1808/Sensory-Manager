@@ -73,8 +73,14 @@ const SpecialistDetailView: React.FC<{
     financials: SpecialistDetails;
     onBack: () => void;
     onAddPayout: () => void;
-}> = ({ specialist, invoices, payouts, financials, onBack, onAddPayout }) => {
+    onUpdatePayout: (data: SpecialistPayout) => Promise<void>;
+    onDeletePayout: (id: string) => Promise<void>;
+}> = ({ specialist, invoices, payouts, financials, onBack, onAddPayout, onUpdatePayout, onDeletePayout }) => {
     
+    const [editingPayout, setEditingPayout] = useState<SpecialistPayout | null>(null);
+    const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+    const [deletingPayoutId, setDeletingPayoutId] = useState<string | null>(null);
+
     const earningsBreakdown = useMemo(() => {
         const owed: { serviceName: string; amount: number; invoiceId: string }[] = [];
         const pending: { serviceName: string; amount: number; invoiceId: string }[] = [];
@@ -162,6 +168,82 @@ const SpecialistDetailView: React.FC<{
                     ) : <p className="text-sm text-gray-500 text-center py-4">No hay comisiones pendientes.</p>}
                 </div>
             </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-md mt-6">
+                 <h4 className="font-bold text-lg mb-4 text-gray-800">Historial de Pagos</h4>
+                 {payouts.length > 0 ? (
+                     <div className="overflow-x-auto">
+                        <table className="min-w-full text-left text-sm whitespace-nowrap">
+                            <thead className="lowercase tracking-wider text-gray-500 bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 rounded-l-lg font-semibold uppercase tracking-wider text-xs">Fecha</th>
+                                    <th className="px-4 py-3 font-semibold uppercase tracking-wider text-xs">Monto</th>
+                                    <th className="px-4 py-3 rounded-r-lg font-semibold uppercase tracking-wider text-xs text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {[...payouts].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(payout => (
+                                    <tr key={payout.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3 font-medium text-gray-800">{new Date(payout.date).toLocaleDateString()}</td>
+                                        <td className="px-4 py-3 font-bold text-green-600">${payout.amount.toFixed(2)}</td>
+                                        <td className="px-4 py-3 text-right">
+                                             <button onClick={() => { setEditingPayout(payout); setIsPayoutModalOpen(true); }} className="text-blue-500 hover:text-blue-700 p-2" title="Editar">
+                                                 <EditIcon className="w-4 h-4 inline-block" />
+                                             </button>
+                                             <button onClick={() => setDeletingPayoutId(payout.id)} className="text-red-500 hover:text-red-700 p-2 ml-1" title="Eliminar">
+                                                 <TrashIcon className="w-4 h-4 inline-block" />
+                                             </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                     </div>
+                 ) : (
+                     <p className="text-sm text-gray-500 text-center py-4">No se han registrado pagos para este especialista.</p>
+                 )}
+            </div>
+
+            <Modal isOpen={isPayoutModalOpen} onClose={() => { setIsPayoutModalOpen(false); setEditingPayout(null); }} title="Editar Pago">
+                {editingPayout && (
+                     <form onSubmit={async (e) => {
+                         e.preventDefault();
+                         const formData = new FormData(e.currentTarget);
+                         const amount = parseFloat(formData.get('amount') as string);
+                         const date = formData.get('date') as string;
+                         if (isNaN(amount) || amount <= 0) return alert('Monto inválido');
+                         await onUpdatePayout({ ...editingPayout, amount, date });
+                         setIsPayoutModalOpen(false);
+                         setEditingPayout(null);
+                     }} className="space-y-4">
+                         <div>
+                             <label className="block text-sm font-bold text-gray-300 mb-1">Monto a pagar ($)</label>
+                             <input type="number" name="amount" defaultValue={editingPayout.amount} step="0.01" min="0.01" className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                         </div>
+                         <div>
+                             <label className="block text-sm font-bold text-gray-300 mb-1">Fecha del Pago</label>
+                             <input type="date" name="date" defaultValue={editingPayout.date} className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                         </div>
+                         <div className="flex justify-end space-x-3 pt-4">
+                             <button type="button" onClick={() => { setIsPayoutModalOpen(false); setEditingPayout(null); }} className="px-6 py-3 bg-slate-600 text-gray-200 font-bold rounded-lg hover:bg-slate-500">Cancelar</button>
+                             <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">Actualizar</button>
+                         </div>
+                     </form>
+                )}
+            </Modal>
+
+            <ConfirmationModal
+                isOpen={!!deletingPayoutId}
+                onClose={() => setDeletingPayoutId(null)}
+                onConfirm={async () => {
+                    if (deletingPayoutId) {
+                        await onDeletePayout(deletingPayoutId);
+                        setDeletingPayoutId(null);
+                    }
+                }}
+                title="Confirmar Eliminación"
+                message="¿Está seguro de que desea eliminar este pago? Esta acción no se puede deshacer."
+            />
         </div>
     );
 };
@@ -286,9 +368,11 @@ interface SpecialistsViewProps {
     onDeleteSpecialist: (id: string) => Promise<void>;
     onExportForSpecialist: (id: string) => void;
     onAddPayout: (data: Omit<SpecialistPayout, 'id'>) => Promise<void>;
+    onUpdatePayout: (data: SpecialistPayout) => Promise<void>;
+    onDeletePayout: (id: string) => Promise<void>;
 }
 
-const SpecialistsView: React.FC<SpecialistsViewProps> = ({ specialists, services, invoices, specialistPayouts, onAddSpecialist, onUpdateSpecialist, onDeleteSpecialist, onExportForSpecialist, onAddPayout }) => {
+const SpecialistsView: React.FC<SpecialistsViewProps> = ({ specialists, services, invoices, specialistPayouts, onAddSpecialist, onUpdateSpecialist, onDeleteSpecialist, onExportForSpecialist, onAddPayout, onUpdatePayout, onDeletePayout }) => {
     const [selectedSpecialistId, setSelectedSpecialistId] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSpecialist, setEditingSpecialist] = useState<Specialist | null>(null);
@@ -363,6 +447,8 @@ const SpecialistsView: React.FC<SpecialistsViewProps> = ({ specialists, services
                     financials={specialistFinancials.get(selectedSpecialist.id)!}
                     onBack={() => setSelectedSpecialistId(null)}
                     onAddPayout={() => setPayoutSpecialistId(selectedSpecialist.id)}
+                    onUpdatePayout={onUpdatePayout}
+                    onDeletePayout={onDeletePayout}
                 />
 
                 <Modal isOpen={!!payoutSpecialistId} onClose={() => setPayoutSpecialistId(null)} title={`Registrar Pago a ${specialists.find(s=>s.id === payoutSpecialistId)?.name}`}>

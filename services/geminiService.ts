@@ -1,22 +1,34 @@
 
 
-import { GoogleGenAI } from "@google/genai";
-// FIX: Add .ts extension to import path.
 import { Client, DebtInfo, Invoice, MedicalRecordEntry, MedicalReportData, Specialist, Service, Expense } from '../types.ts';
 
-const resolvedApiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || "";
-if (!resolvedApiKey) {
-  console.error("Neither GEMINI_API_KEY nor API_KEY environment variable is set.");
-}
-
-const ai = new GoogleGenAI({ 
-  apiKey: resolvedApiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build'
+const callGeminiAPI = async (payload: any, retries = 3, delay = 1000): Promise<string> => {
+  try {
+    const res = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+        if (res.status === 503 && retries > 0) {
+            console.warn(`Gemini API busy (503). Retrying in ${delay}ms... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return callGeminiAPI(payload, retries - 1, delay * 2);
+        }
+        throw new Error(data.error || 'Server error');
     }
+    return data.text || '';
+  } catch (err: any) {
+    if (retries > 0 && err.message?.includes('503')) {
+        console.warn(`Gemini API error. Retrying in ${delay}ms... (${retries} retries left)`, err);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return callGeminiAPI(payload, retries - 1, delay * 2);
+    }
+    console.error("Error calling backend Gemini API:", err);
+    throw err;
   }
-});
+};
 
 export const generateBusinessSummary = async (clients: Client[], invoices: Invoice[]): Promise<string> => {
     const reportData = {
@@ -48,13 +60,8 @@ export const generateBusinessSummary = async (clients: Client[], invoices: Invoi
     `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: prompt,
-        });
-        return response.text;
+        return await callGeminiAPI({ model: 'gemini-2.5-flash', prompt });
     } catch (error) {
-        console.error("Error generating report with Gemini:", error);
         return "Error: No se pudo generar el reporte. Por favor, intente de nuevo más tarde.";
     }
 };
@@ -91,13 +98,8 @@ export const generateSpecialistReport = async (specialists: Specialist[], invoic
     `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: prompt,
-        });
-        return response.text;
+        return await callGeminiAPI({ model: 'gemini-2.5-flash', prompt });
     } catch (error) {
-        console.error("Error generating specialist report with Gemini:", error);
         return "Error: No se pudo generar el reporte de especialistas.";
     }
 };
@@ -132,13 +134,8 @@ export const generateDebtReport = async (debtInfo: DebtInfo[]): Promise<string> 
         Formatea la salida claramente usando **markdown** para los títulos y viñetas.
     `;
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: prompt,
-        });
-        return response.text;
+         return await callGeminiAPI({ model: 'gemini-2.5-flash', prompt });
     } catch (error) {
-        console.error("Error generating debt report with Gemini:", error);
         return "Error: No se pudo generar el reporte de deudas.";
     }
 };
@@ -179,13 +176,8 @@ export const generateExpenseReport = async (expenses: Expense[]): Promise<string
         Formatea la salida claramente usando **markdown** para los títulos y viñetas.
     `;
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: prompt,
-        });
-        return response.text;
+        return await callGeminiAPI({ model: 'gemini-2.5-flash', prompt });
     } catch (error) {
-        console.error("Error generating expense report with Gemini:", error);
         return "Error: No se pudo generar el reporte de gastos.";
     }
 };
@@ -242,13 +234,8 @@ ${debtItems}`;
     `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: prompt,
-        });
-        return response.text;
+        return await callGeminiAPI({ model: 'gemini-2.5-flash', prompt });
     } catch (error) {
-        console.error("Error generating client report with Gemini:", error);
         return "Error: No se pudo generar el informe del cliente. Verifique la conexión o la configuración de la API.";
     }
 };
@@ -353,13 +340,8 @@ export const generateMedicalReport = async (data: MedicalReportData): Promise<st
     parts.unshift({ text: prompt });
 
      try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: { parts },
-        });
-        return response.text;
+        return await callGeminiAPI({ model: 'gemini-2.5-flash', parts });
     } catch (error) {
-        console.error("Error generating medical report with Gemini:", error);
         return "Error: No se pudo generar el informe médico. Por favor, intente de nuevo más tarde.";
     }
 };

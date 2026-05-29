@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Appointment, Client, Specialist, User } from '../types.ts';
+import { Appointment, Client, Specialist, User, WhatsAppTemplate } from '../types.ts';
 import Modal, { ConfirmationModal } from './Modal.tsx';
 import { AddIcon, EditIcon, TrashIcon, ChevronRightIcon, BackIcon, CalendarPlusIcon, WhatsAppIcon } from './icons.tsx';
 
@@ -9,17 +9,19 @@ interface CalendarViewProps {
     clients: Client[];
     specialists: Specialist[];
     currentUser: User;
+    whatsappTemplates: WhatsAppTemplate[];
     onAddAppointment: (newAppointments: Omit<Appointment, 'id'>[]) => Promise<void>;
     onUpdateAppointment: (updatedAppointment: Appointment, scope: 'single' | 'all') => Promise<void>;
     onDeleteAppointment: (appointmentId: string, scope: 'single' | 'all') => Promise<void>;
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({ appointments, clients, specialists, currentUser, onAddAppointment, onUpdateAppointment, onDeleteAppointment }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ appointments, clients, specialists, currentUser, whatsappTemplates, onAddAppointment, onUpdateAppointment, onDeleteAppointment }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
     const [deleteRequest, setDeleteRequest] = useState<{ id: string; scope: 'single' | 'all' } | null>(null);
+    const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
     const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
     const specialistMap = useMemo(() => new Map(specialists.map(s => [s.id, s])), [specialists]);
@@ -97,21 +99,42 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointments, clients, spec
         setIsFormOpen(false);
     };
 
-    const handleShareWhatsApp = (appt: Appointment) => {
+    const handleShareWhatsApp = (appt: Appointment, templateBody: string | null) => {
         if (!appt.clientId) return;
         const client = clientMap.get(appt.clientId);
         const specialist = specialistMap.get(appt.specialistId);
         const date = new Date(appt.start).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const time = new Date(appt.start).toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-        const message = `*Recordatorio de Cita - Sensory Manager*%0A%0A` +
-                        `*Paciente:* ${client?.patientName || 'N/A'}%0A` +
-                        `*Especialista:* ${specialist?.name || 'N/A'}%0A` +
-                        `*Fecha:* ${date}%0A` +
-                        `*Hora:* ${time}%0A%0A` +
-                        `*Notas:* ${appt.notes || 'Ninguna'}`;
-        
-        window.open(`https://wa.me/?text=${message}`, '_blank');
+        const phone = client?.phone?.replace(/\D/g, '') || '';
+        if (!phone) {
+            alert('El paciente no tiene un número de teléfono registrado.');
+            return;
+        }
+
+        if (templateBody === null) {
+            // Direct message
+            window.open(`https://wa.me/${phone}`, '_blank');
+        } else if (templateBody === 'default') {
+            // Default hardcoded message
+            const message = `*Recordatorio de Cita - Sensory Manager*%0A%0A` +
+                            `*Paciente:* ${client?.patientName || 'N/A'}%0A` +
+                            `*Especialista:* ${specialist?.name || 'N/A'}%0A` +
+                            `*Fecha:* ${date}%0A` +
+                            `*Hora:* ${time}%0A%0A` +
+                            `*Notas:* ${appt.notes || 'Ninguna'}`;
+            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+        } else {
+            // Custom template
+            let message = templateBody;
+            message = message.replace(/\{\{paciente\}\}/g, client?.patientName || '');
+            message = message.replace(/\{\{representante\}\}/g, client?.representativeName || '');
+            message = message.replace(/\{\{fecha\}\}/g, date);
+            message = message.replace(/\{\{hora\}\}/g, time);
+            
+            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+        }
+        setShowTemplateSelector(false);
     };
 
     return (
@@ -179,10 +202,46 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointments, clients, spec
                                     <button onClick={() => handleDeleteRequest(selectedAppointment.id, selectedAppointment.groupId)} className="p-2 text-gray-300 hover:text-red-400 bg-slate-700 rounded-full"><TrashIcon className="w-5 h-5"/></button>
                                 </div>
                                 {selectedAppointment.clientId && (
-                                    <button onClick={() => handleShareWhatsApp(selectedAppointment)} className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                                        <WhatsAppIcon className="w-5 h-5"/>
-                                        <span className="font-semibold text-sm">Compartir</span>
-                                    </button>
+                                    <div className="relative">
+                                        <button onClick={() => setShowTemplateSelector(!showTemplateSelector)} className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                            <WhatsAppIcon className="w-5 h-5"/>
+                                            <span className="font-semibold text-sm">Avisar por WhatsApp</span>
+                                        </button>
+                                        {showTemplateSelector && (
+                                            <div className="absolute right-0 bottom-full mb-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden divide-y divide-gray-100">
+                                                <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                                                    <p className="text-xs font-bold text-gray-500 uppercase">Seleccionar Plantilla</p>
+                                                    <button onClick={() => setShowTemplateSelector(false)} className="text-gray-400 hover:text-gray-600">×</button>
+                                                </div>
+                                                <div className="max-h-60 overflow-y-auto">
+                                                    <button 
+                                                        onClick={() => handleShareWhatsApp(selectedAppointment, null)}
+                                                        className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                                                    >
+                                                        <p className="font-bold text-sm text-gray-800">Mensaje Directo</p>
+                                                        <p className="text-xs text-gray-500 truncate">Escribir sin plantilla...</p>
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleShareWhatsApp(selectedAppointment, 'default')}
+                                                        className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                                                    >
+                                                        <p className="font-bold text-sm text-gray-800">Recordatorio Básico</p>
+                                                        <p className="text-xs text-gray-500 truncate">Plantilla predeterminada...</p>
+                                                    </button>
+                                                    {whatsappTemplates.length > 0 && whatsappTemplates.map(template => (
+                                                        <button 
+                                                            key={template.id}
+                                                            onClick={() => handleShareWhatsApp(selectedAppointment, template.template)}
+                                                            className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
+                                                        >
+                                                            <p className="font-bold text-sm text-gray-800">{template.title}</p>
+                                                            <p className="text-xs text-gray-500 truncate">{template.template}</p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         )}

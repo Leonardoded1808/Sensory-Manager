@@ -32,6 +32,7 @@ const ClientDetailView: React.FC<{ client: Client; invoices: Invoice[]; medicalR
     const [report, setReport] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+    const [showGenericTemplateSelector, setShowGenericTemplateSelector] = useState(false);
 
     const clientInvoices = invoices.filter(inv => inv.clientId === client.id)
                                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -109,14 +110,47 @@ const ClientDetailView: React.FC<{ client: Client; invoices: Invoice[]; medicalR
             </div>
             
             {client.phone && (
-                <div className="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-100 w-fit">
+                <div className="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-100 w-fit relative">
                     <span className="font-semibold text-gray-700">{client.phone}</span>
                     <a href={`tel:${client.phone.replace(/\D/g, '')}`} className="p-1.5 bg-blue-100 text-blue-600 hover:bg-blue-200 rounded-full transition-colors" title="Llamar">
                         <PhoneIcon className="w-5 h-5"/>
                     </a>
-                    <a href={`https://wa.me/${client.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-green-100 text-green-600 hover:bg-green-200 rounded-full transition-colors" title="Enviar WhatsApp">
+                    <button onClick={() => setShowGenericTemplateSelector(!showGenericTemplateSelector)} className="p-1.5 bg-green-100 text-green-600 hover:bg-green-200 rounded-full transition-colors" title="Enviar WhatsApp">
                         <WhatsAppIcon className="w-5 h-5"/>
-                    </a>
+                    </button>
+                    {showGenericTemplateSelector && (
+                        <div className="absolute left-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden divide-y divide-gray-100">
+                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                                <p className="text-xs font-bold text-gray-500 uppercase">Seleccionar Plantilla</p>
+                                <button onClick={() => setShowGenericTemplateSelector(false)} className="text-gray-400 hover:text-gray-600">×</button>
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                                <button 
+                                    onClick={() => {
+                                        const url = `https://wa.me/${client.phone.replace(/\D/g, '')}`;
+                                        window.open(url, '_blank');
+                                        setShowGenericTemplateSelector(false);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                                >
+                                    <p className="font-bold text-sm text-gray-800">Mensaje Directo</p>
+                                    <p className="text-xs text-gray-500 truncate">Escribir sin plantilla...</p>
+                                </button>
+                                {whatsappTemplates.length > 0 ? whatsappTemplates.map(template => (
+                                    <button 
+                                        key={template.id}
+                                        onClick={() => sendMessage(template.template, undefined)}
+                                        className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
+                                    >
+                                        <p className="font-bold text-sm text-gray-800">{template.title}</p>
+                                        <p className="text-xs text-gray-500 truncate">{template.template}</p>
+                                    </button>
+                                )) : (
+                                    <div className="px-4 py-3 text-sm text-gray-500 text-center">No hay plantillas creadas.</div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -149,6 +183,17 @@ const ClientDetailView: React.FC<{ client: Client; invoices: Invoice[]; medicalR
                                         <p className="text-xs font-bold text-gray-500 uppercase">Seleccionar Plantilla</p>
                                     </div>
                                     <div className="max-h-60 overflow-y-auto">
+                                        <button 
+                                            onClick={() => {
+                                                const url = `https://wa.me/${client.phone.replace(/\D/g, '')}`;
+                                                window.open(url, '_blank');
+                                                setShowTemplateSelector(false);
+                                            }}
+                                            className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                                        >
+                                            <p className="font-bold text-sm text-gray-800">Mensaje Directo</p>
+                                            <p className="text-xs text-gray-500 truncate">Escribir sin plantilla...</p>
+                                        </button>
                                         {whatsappTemplates.length > 0 ? whatsappTemplates.map(template => (
                                             <button 
                                                 key={template.id}
@@ -598,6 +643,17 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, invoices, medicalRec
                                                                 Seleccionar Plantilla
                                                             </div>
                                                             <div className="max-h-48 overflow-y-auto">
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const url = `https://wa.me/${client.phone.replace(/\D/g, '')}`;
+                                                                        window.open(url, '_blank');
+                                                                        setShowTemplateSelectorFor(null);
+                                                                    }}
+                                                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors block border-b border-gray-100"
+                                                                >
+                                                                    <p className="font-bold text-xs text-gray-800">Mensaje Directo (Sin plantilla)</p>
+                                                                </button>
                                                                 {whatsappTemplates.length > 0 ? whatsappTemplates.map(template => (
                                                                     <button 
                                                                         key={template.id}

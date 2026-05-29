@@ -160,6 +160,9 @@ export interface SpecialistMedicalData {
     specialistName: string;
     exportDate: string;
     records: MedicalRecordEntry[];
+    clients?: Client[];
+    appointments?: Appointment[];
+    services?: Service[];
 }
 
 export interface SpecialistExportData {

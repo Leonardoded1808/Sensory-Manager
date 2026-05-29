@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import jsPDF from 'https://esm.sh/jspdf@2.5.1';
 
 // Import types
 import { Page, Client, Service, Invoice, Specialist, TicketConfig, Expense, MedicalRecordEntry, User, Payment, Notification, Appointment, SpecialistExportData, SpecialistMedicalData, Manager, ManagerPayout, WhatsAppTemplate, SpecialistPayout } from './types.ts';
@@ -167,7 +168,16 @@ const App: React.FC = () => {
                     setWhatsappTemplates([{ id: 'default', title: 'Recordatorio Estándar', template: 'Hola {{representante}}, de parte del centro le recordamos que {{paciente}} tiene una cita programada para el {{fecha}} a las {{hora}}. Por favor confirme su asistencia. ¡Le esperamos!' }]);
                 }
 
-                setCurrentUser(await db.getSingleItem<User>('user', 'currentUser') || null);
+                const sessionUserStr = sessionStorage.getItem('sensory_current_user');
+                if (sessionUserStr) {
+                    try {
+                        setCurrentUser(JSON.parse(sessionUserStr));
+                    } catch (e) {
+                        setCurrentUser(null);
+                    }
+                } else {
+                    setCurrentUser(null);
+                }
                 
                 let storedPassword = await db.getSingleItem<string>('adminPassword', 'currentPassword');
                 if (!storedPassword) {
@@ -194,20 +204,23 @@ const App: React.FC = () => {
         if (user.role === 'admin') {
             if (password === adminPassword) {
                 setCurrentUser(user);
-                await db.putSingleItem('user', 'currentUser', user);
+                sessionStorage.setItem('sensory_current_user', JSON.stringify(user));
+                await db.putSingleItem('user', 'currentUser', user); // Keep in DB for backup purposes optionally
                 setActivePage('dashboard');
             } else {
                 addNotification('Contraseña de administrador incorrecta.', 'error');
             }
         } else {
             setCurrentUser(user);
-            await db.putSingleItem('user', 'currentUser', user);
+            sessionStorage.setItem('sensory_current_user', JSON.stringify(user));
+            await db.putSingleItem('user', 'currentUser', user); // Keep in DB for backup purposes optionally
             setActivePage('dashboard');
         }
     };
 
     const handleLogout = async () => {
         setCurrentUser(null);
+        sessionStorage.removeItem('sensory_current_user');
         await db.deleteItem('user', 'currentUser');
     };
     
@@ -382,6 +395,18 @@ const App: React.FC = () => {
         addNotification('Pago a gerente registrado.');
     };
 
+    const handleUpdateManagerPayout = async (data: ManagerPayout) => {
+        setManagerPayouts(prev => prev.map(p => p.id === data.id ? data : p));
+        await db.putItem('managerPayouts', data);
+        addNotification('Pago a gerente actualizado.');
+    };
+
+    const handleDeleteManagerPayout = async (id: string) => {
+        setManagerPayouts(prev => prev.filter(p => p.id !== id));
+        await db.deleteItem('managerPayouts', id);
+        addNotification('Pago a gerente eliminado.');
+    };
+
     const handleAddSpecialistPayout = async (data: Omit<SpecialistPayout, 'id'>) => {
         const newPayout = { ...data, id: uuidv4() };
         setSpecialistPayouts(prev => [...prev, newPayout]);
@@ -398,6 +423,18 @@ const App: React.FC = () => {
         };
         setExpenses(prev => [...prev, newExpense]);
         await db.putItem('expenses', newExpense);
+    };
+
+    const handleUpdateSpecialistPayout = async (data: SpecialistPayout) => {
+        setSpecialistPayouts(prev => prev.map(p => p.id === data.id ? data : p));
+        await db.putItem('specialistPayouts', data);
+        addNotification('Pago a especialista actualizado.');
+    };
+
+    const handleDeleteSpecialistPayout = async (id: string) => {
+        setSpecialistPayouts(prev => prev.filter(p => p.id !== id));
+        await db.deleteItem('specialistPayouts', id);
+        addNotification('Pago a especialista eliminado.');
     };
 
     const handleSaveTicketConfig = async (config: TicketConfig) => {
@@ -614,20 +651,122 @@ const App: React.FC = () => {
             if (!data.specialistName || !data.records || !Array.isArray(data.records)) {
                 throw new Error("Invalid specialist file format.");
             }
-            const existingRecordIds = new Set(medicalRecords.map(r => r.id));
-            const newRecords = data.records.filter(rec => !existingRecordIds.has(rec.id));
             
-            if (newRecords.length > 0) {
-                setMedicalRecords(prev => [...prev, ...newRecords]);
-                await Promise.all(newRecords.map(rec => db.putItem('medicalRecords', rec)));
-                addNotification(`${newRecords.length} nuevo(s) registro(s) importado(s) de ${data.specialistName}.`);
-            } else {
-                addNotification(`No hay registros nuevos para importar de ${data.specialistName}.`, 'info');
+            let message = `Importado de ${data.specialistName}: `;
+
+            // Merge records
+            if (data.records && Array.isArray(data.records)) {
+                let modified = 0;
+                setMedicalRecords(prev => {
+                    const next = [...prev];
+                    data.records.forEach(importedItem => {
+                        const index = next.findIndex(i => i.id === importedItem.id);
+                        if (index !== -1) {
+                            next[index] = { ...next[index], ...importedItem };
+                        } else {
+                            next.push(importedItem);
+                        }
+                        db.putItem('medicalRecords', importedItem);
+                        modified++;
+                    });
+                    return next;
+                });
+                if (modified > 0) message += `${modified} registros actualizados/nuevos. `;
             }
+
+            // Merge clients
+            if (data.clients && Array.isArray(data.clients)) {
+                let modified = 0;
+                setClients(prev => {
+                    const next = [...prev];
+                    data.clients.forEach(importedItem => {
+                        const index = next.findIndex(i => i.id === importedItem.id);
+                        if (index !== -1) {
+                            next[index] = { ...next[index], ...importedItem };
+                        } else {
+                            next.push(importedItem);
+                        }
+                        db.putItem('clients', importedItem);
+                        modified++;
+                    });
+                    return next;
+                });
+                if (modified > 0) message += `${modified} clientes actualizados/nuevos. `;
+            }
+
+            // Merge appointments
+            if (data.appointments && Array.isArray(data.appointments)) {
+                let modified = 0;
+                setAppointments(prev => {
+                    const next = [...prev];
+                    data.appointments.forEach(importedItem => {
+                        const index = next.findIndex(i => i.id === importedItem.id);
+                        if (index !== -1) {
+                            next[index] = { ...next[index], ...importedItem };
+                        } else {
+                            next.push(importedItem);
+                        }
+                        db.putItem('appointments', importedItem);
+                        modified++;
+                    });
+                    return next;
+                });
+                if (modified > 0) message += `${modified} citas actualizadas/nuevas. `;
+            }
+
+            // Merge services
+            if (data.services && Array.isArray(data.services)) {
+                const existingServiceIds = new Set(services.map(s => s.id));
+                const newServices = data.services.filter(srv => !existingServiceIds.has(srv.id));
+                if (newServices.length > 0) {
+                    setServices(prev => [...prev, ...newServices]);
+                    await Promise.all(newServices.map(srv => db.putItem('services', srv)));
+                    message += `${newServices.length} servicios. `;
+                }
+            }
+            
+            addNotification(message || `No hay datos nuevos para importar de ${data.specialistName}.`);
         } catch (e) {
             console.error(e);
             addNotification('Error al importar datos del especialista.', 'error');
         }
+    };
+
+    const handleExportSpecialistJSON = (specialistId: string) => {
+        const specialist = specialists.find(s => s.id === specialistId);
+        if (!specialist) {
+            addNotification('Especialista no encontrado', 'error');
+            return;
+        }
+
+        const specialistRecords = medicalRecords.filter(r => r.specialistId === specialistId);
+        const specialistAppts = appointments.filter(a => a.specialistId === specialistId);
+        
+        const assignedClientIds = new Set<string>();
+        specialistRecords.forEach(r => assignedClientIds.add(r.clientId));
+        specialistAppts.forEach(a => assignedClientIds.add(a.clientId));
+        invoices.filter(i => i.specialistId === specialistId).forEach(i => assignedClientIds.add(i.clientId));
+        
+        const specialistClients = clients.filter(c => assignedClientIds.has(c.id));
+
+        const data: SpecialistMedicalData = {
+            specialistName: specialist.name,
+            exportDate: new Date().toISOString(),
+            records: specialistRecords,
+            clients: specialistClients,
+            appointments: specialistAppts,
+            services: services
+        };
+
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Datos_Especialista_${specialist.name.replace(/\s+/g, '_')}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        addNotification(`Datos de ${specialist.name} exportados exitosamente.`);
     };
 
     const onExportForSpecialist = (id: string) => {
@@ -635,37 +774,191 @@ const App: React.FC = () => {
         if (!specialist) return;
         
         const specialistInvoices = invoices.filter(inv => inv.specialistId === id);
-        const assignedClientIds = new Set(specialistInvoices.map(inv => inv.clientId));
-        const assignedPatients = clients.filter(c => assignedClientIds.has(c.id));
+        const specialistPayoutsData = specialistPayouts.filter(p => p.specialistId === id);
+        
+        let totalPotential = 0;
+        let earnedToDate = 0;
+        let totalPaid = 0;
 
-        let owedByCompany = 0;
-        let pendingFromClients = 0;
+        const earningsOwed: { client: string; service: string; amount: number; date: Date }[] = [];
+        const earningsPending: { client: string; service: string; amount: number; date: Date }[] = [];
+
+        const clientsMap = new Map(clients.map(c => [c.id, c]));
 
         specialistInvoices.forEach(inv => {
             const earnings = inv.specialistEarnings || 0;
-            if (inv.status === 'Pagada') {
-                owedByCompany += earnings;
-            } else {
-                pendingFromClients += earnings;
+            totalPotential += earnings;
+            if (inv.price > 0) {
+                const paidRatio = inv.amountPaid / inv.price;
+                const earned = earnings * paidRatio;
+                earnedToDate += earned;
+                
+                const clientName = clientsMap.get(inv.clientId)?.patientName || 'Cliente desconocido';
+
+                if (earned > 0) {
+                    earningsOwed.push({ client: clientName, service: inv.serviceName, amount: earned, date: new Date(inv.createdAt) });
+                }
+                const pending = earnings - earned;
+                if (pending > 0.005) {
+                    earningsPending.push({ client: clientName, service: inv.serviceName, amount: pending, date: new Date(inv.createdAt) });
+                }
             }
         });
 
-        const exportData: SpecialistExportData = {
-            specialist,
-            assignedPatients,
-            invoices: specialistInvoices,
-            financialSummary: { owedByCompany, pendingFromClients, totalPotentialEarnings: owedByCompany + pendingFromClients }
+        specialistPayoutsData.forEach(p => {
+            totalPaid += p.amount;
+        });
+
+        const balanceOwed = earnedToDate - totalPaid;
+
+        const doc = new jsPDF();
+        const pageW = doc.internal.pageSize.getWidth();
+        const margin = 15;
+        let y = margin;
+    
+        // 1. Header
+        if (ticketConfig.logo) {
+            try {
+                const img = new Image();
+                img.src = ticketConfig.logo;
+                const aspectRatio = img.width / img.height;
+                const logoWidth = 25;
+                const logoHeight = logoWidth / aspectRatio;
+                doc.addImage(ticketConfig.logo, 'PNG', margin, y, logoWidth, logoHeight);
+            } catch (e) {
+                console.error("Error adding logo to PDF", e);
+            }
+        }
+    
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        const companyX = pageW - margin;
+        if (ticketConfig.companyName) doc.text(ticketConfig.companyName, companyX, y, { align: 'right' });
+        y += 5;
+        if (ticketConfig.companyId) doc.text(`RIF: ${ticketConfig.companyId}`, companyX, y, { align: 'right' });
+        y += 5;
+        if (ticketConfig.address) doc.text(ticketConfig.address, companyX, y, { align: 'right' });
+        y += 5;
+        if (ticketConfig.phone) doc.text(`Tel: ${ticketConfig.phone}`, companyX, y, { align: 'right' });
+        y += 5;
+        if (ticketConfig.email) doc.text(ticketConfig.email, companyX, y, { align: 'right' });
+    
+        y = Math.max(y, margin + 30);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageW - margin, y);
+        y += 10;
+    
+        // 2. Title
+        doc.setFontSize(16);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'bold');
+        doc.text('ESTADO DE CUENTA - ESPECIALISTA', margin, y);
+    
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, companyX, y, { align: 'right' });
+        y += 10;
+    
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Especialista: ${specialist.name}`, margin, y);
+        y += 10;
+
+        // 3. Summary
+        doc.setFontSize(10);
+        doc.text('RESUMEN FINANCIERO', margin, y);
+        y += 6;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Ganancia Potencial Total: $${totalPotential.toFixed(2)}`, margin, y);
+        y += 5;
+        doc.text(`Comisiones Ganadas (Por cobrar a la empresa): $${earnedToDate.toFixed(2)}`, margin, y);
+        y += 5;
+        doc.text(`Total Pagado al Especialista: $${totalPaid.toFixed(2)}`, margin, y);
+        y += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(200, 0, 0);
+        doc.text(`SALDO PENDIENTE A DEBER: $${balanceOwed.toFixed(2)}`, margin, y);
+        doc.setTextColor(0, 0, 0);
+        y += 12;
+
+        // Function for drawing simple tables
+        const drawTable = (title: string, items: any[], colLabels: string[]) => {
+            if (items.length === 0) return;
+            // check page wrap
+            if (y > doc.internal.pageSize.getHeight() - 40) {
+                doc.addPage();
+                y = margin;
+            }
+
+            doc.setFont('helvetica', 'bold');
+            doc.text(title, margin, y);
+            y += 5;
+
+            const contentW = pageW - margin * 2;
+            doc.setFillColor(230, 230, 230);
+            doc.rect(margin, y, contentW, 8, 'F');
+            doc.text(colLabels[0], margin + 2, y + 5);
+            doc.text(colLabels[1], margin + 60, y + 5);
+            doc.text(colLabels[2], margin + contentW - 2, y + 5, { align: 'right' });
+            y += 8;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setDrawColor(200, 200, 200);
+            items.forEach((item, i) => {
+                if (y > doc.internal.pageSize.getHeight() - 20) {
+                    doc.addPage();
+                    y = margin;
+                }
+                const isEven = i % 2 === 0;
+                if (isEven) {
+                    doc.setFillColor(248, 248, 248);
+                    doc.rect(margin, y, contentW, 8, 'F');
+                }
+                doc.rect(margin, y, contentW, 8, 'S');
+                doc.text(item.col1, margin + 2, y + 5);
+                doc.text(item.col2, margin + 60, y + 5);
+                doc.text(item.col3, margin + contentW - 2, y + 5, { align: 'right' });
+                y += 8;
+            });
+            y += 8;
         };
 
-        const dataStr = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `reporte-${specialist.name.replace(/\s/g, '_')}-${new Date().toISOString().split('T')[0]}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        addNotification(`Reporte para ${specialist.name} exportado.`);
+        // 4. Tables
+        drawTable('Últimos Pagos Realizados al Especialista', 
+            specialistPayoutsData.slice().sort((a,b)=>new Date(b.date).getTime() - new Date(a.date).getTime()).map(p => ({
+                col1: new Date(p.date).toLocaleDateString('es-ES'),
+                col2: p.notes || 'Abono',
+                col3: `$${p.amount.toFixed(2)}`
+            })), 
+            ['Fecha', 'Descripción', 'Monto']
+        );
+
+        drawTable('Comisiones Desbloqueadas (Por Pagar)',
+            earningsOwed.slice().sort((a,b)=>b.date.getTime() - a.date.getTime()).map(e => ({
+                col1: e.date.toLocaleDateString('es-ES'),
+                col2: `${e.client} - ${e.service}`,
+                col3: `$${e.amount.toFixed(2)}`
+            })),
+            ['Fecha', 'Paciente / Servicio', 'Desbloqueado']
+        );
+
+        drawTable('Comisiones Bloqueadas (Clientes con deuda)',
+            earningsPending.slice().sort((a,b)=>b.date.getTime() - a.date.getTime()).map(e => ({
+                col1: e.date.toLocaleDateString('es-ES'),
+                col2: `${e.client} - ${e.service}`,
+                col3: `$${e.amount.toFixed(2)}`
+            })),
+            ['Fecha', 'Paciente / Servicio', 'Pendiente']
+        );
+        
+        const pageH = doc.internal.pageSize.getHeight();
+        if (ticketConfig.footer) {
+            doc.setTextColor(80, 80, 80);
+            doc.setFontSize(9);
+            doc.text(ticketConfig.footer, pageW / 2, pageH - 10, { align: 'center' });
+        }
+
+        doc.save(`Estado_Cuenta_${specialist.name.replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+        addNotification(`Reporte PDF para ${specialist.name} generado.`);
     };
 
     const renderPage = () => {
@@ -673,11 +966,13 @@ const App: React.FC = () => {
              return <SpecialistDashboardView 
                         currentUser={currentUser} invoices={invoices} clients={clients}
                         specialists={specialists} medicalRecords={medicalRecords}
-                        appointments={appointments} onAddMedicalRecordEntry={onAddMedicalRecordEntry}
+                        appointments={appointments} ticketConfig={ticketConfig} onAddMedicalRecordEntry={onAddMedicalRecordEntry}
                         onUpdateMedicalRecordEntry={onUpdateMedicalRecordEntry}
                         onDeleteMedicalRecordEntry={onDeleteMedicalRecordEntry}
                         onAddAppointment={handleAddAppointment} onUpdateAppointment={handleUpdateAppointment}
-                        onDeleteAppointment={handleDeleteAppointment} />;
+                        onDeleteAppointment={handleDeleteAppointment}
+                        onImportSpecialistData={handleImportSpecialistData}
+                        onExportSpecialistJSON={handleExportSpecialistJSON} />;
         }
         
         switch (activePage) {
@@ -694,19 +989,19 @@ const App: React.FC = () => {
             case 'expenses':
                 return <ExpensesView expenses={expenses} onAddExpense={handleAddExpense} onUpdateExpense={handleUpdateExpense} onDeleteExpense={handleDeleteExpense} />;
             case 'medicalHistory':
-                return <MedicalHistoryView clients={clients} medicalRecords={medicalRecords} invoices={invoices} specialists={specialists} currentUser={currentUser!} onAddMedicalRecordEntry={onAddMedicalRecordEntry} onUpdateMedicalRecordEntry={onUpdateMedicalRecordEntry} onDeleteMedicalRecordEntry={onDeleteMedicalRecordEntry} />;
+                return <MedicalHistoryView clients={clients} medicalRecords={medicalRecords} invoices={invoices} specialists={specialists} currentUser={currentUser!} ticketConfig={ticketConfig} onAddMedicalRecordEntry={onAddMedicalRecordEntry} onUpdateMedicalRecordEntry={onUpdateMedicalRecordEntry} onDeleteMedicalRecordEntry={onDeleteMedicalRecordEntry} />;
             case 'specialists':
-                return <SpecialistsView specialists={specialists} services={services} invoices={invoices} specialistPayouts={specialistPayouts} onAddSpecialist={handleAddSpecialist} onUpdateSpecialist={handleUpdateSpecialist} onDeleteSpecialist={handleDeleteSpecialist} onExportForSpecialist={onExportForSpecialist} onAddPayout={handleAddSpecialistPayout} />;
+                return <SpecialistsView specialists={specialists} services={services} invoices={invoices} specialistPayouts={specialistPayouts} onAddSpecialist={handleAddSpecialist} onUpdateSpecialist={handleUpdateSpecialist} onDeleteSpecialist={handleDeleteSpecialist} onExportForSpecialist={onExportForSpecialist} onAddPayout={handleAddSpecialistPayout} onUpdatePayout={handleUpdateSpecialistPayout} onDeletePayout={handleDeleteSpecialistPayout} />;
             case 'managers':
-                return <ManagersView managers={managers} invoices={invoices} managerPayouts={managerPayouts} clients={clients} onAddManager={handleAddManager} onUpdateManager={handleUpdateManager} onDeleteManager={handleDeleteManager} onAddPayout={handleAddManagerPayout} />;
+                return <ManagersView managers={managers} invoices={invoices} managerPayouts={managerPayouts} clients={clients} onAddManager={handleAddManager} onUpdateManager={handleUpdateManager} onDeleteManager={handleDeleteManager} onAddPayout={handleAddManagerPayout} onUpdatePayout={handleUpdateManagerPayout} onDeletePayout={handleDeleteManagerPayout} />;
             case 'management':
-                return <ManagementView initialConfig={ticketConfig} whatsappTemplates={whatsappTemplates} onSave={handleSaveTicketConfig} onSaveTemplates={handleSaveWhatsappTemplates} onExport={handleExportData} onImport={handleImportData} onImportSpecialistData={handleImportSpecialistData} onUpdateAdminPassword={handleUpdateAdminPassword} />;
+                return <ManagementView initialConfig={ticketConfig} whatsappTemplates={whatsappTemplates} specialists={specialists} onSave={handleSaveTicketConfig} onSaveTemplates={handleSaveWhatsappTemplates} onExport={handleExportData} onImport={handleImportData} onImportSpecialistData={handleImportSpecialistData} onExportSpecialistJSON={handleExportSpecialistJSON} onUpdateAdminPassword={handleUpdateAdminPassword} />;
             case 'reports':
                 return <ReportsView clients={clients} invoices={invoices} specialists={specialists} services={services} expenses={expenses} />;
             case 'calendar':
                  return <CalendarView 
                             appointments={appointments} clients={clients} specialists={specialists}
-                            currentUser={currentUser!} onAddAppointment={handleAddAppointment}
+                            currentUser={currentUser!} whatsappTemplates={whatsappTemplates} onAddAppointment={handleAddAppointment}
                             onUpdateAppointment={handleUpdateAppointment} onDeleteAppointment={handleDeleteAppointment} />;
             default:
                 return <div>Página no encontrada</div>;

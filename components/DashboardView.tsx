@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Client, Invoice, Expense, Service, Appointment } from '../types.ts';
 import { calculateAllDebts } from '../services/debtService.ts'; // ADDED
 
@@ -32,27 +32,44 @@ const StatCard: React.FC<{
 
 
 const DashboardView: React.FC<DashboardViewProps> = ({ clients, invoices, expenses, services, appointments, onNavigateToClient }) => {
+    const currentDate = new Date();
+    const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth());
+    const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
+
+    const filteredInvoices = useMemo(() => {
+        return invoices.filter(inv => {
+            const d = new Date(inv.createdAt);
+            return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+        });
+    }, [invoices, selectedMonth, selectedYear]);
+
+    const filteredExpenses = useMemo(() => {
+        return expenses.filter(exp => {
+            const d = new Date(exp.date);
+            return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+        });
+    }, [expenses, selectedMonth, selectedYear]);
     
     const stats = useMemo(() => {
         // Precise financial rounding
-        const totalIncome = Number(invoices.reduce((sum, inv) => sum + inv.amountPaid, 0).toFixed(2));
-        const totalExpenses = Number(expenses.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2));
-        const totalDebt = Number(invoices.reduce((sum, inv) => sum + inv.balance, 0).toFixed(2));
+        const totalIncome = Number(filteredInvoices.reduce((sum, inv) => sum + inv.amountPaid, 0).toFixed(2));
+        const totalExpenses = Number(filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2));
+        const totalDebt = Number(filteredInvoices.reduce((sum, inv) => sum + inv.balance, 0).toFixed(2));
 
-        // Active Patients: registered patients that have an appointment or invoice in the last 30 days, or active debts
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
+        // Active Patients: registered patients that have an appointment or invoice in the selected month
         const activeClientsCount = clients.filter(c => {
-            const hasRecentInvoice = invoices.some(i => i.clientId === c.id && new Date(i.createdAt) >= thirtyDaysAgo);
-            const hasRecentAppt = appointments.some(a => a.clientId === c.id && new Date(a.start) >= thirtyDaysAgo);
-            const hasPendingBalance = invoices.some(i => i.clientId === c.id && i.balance > 0);
+            const hasRecentInvoice = filteredInvoices.some(i => i.clientId === c.id);
+            const hasRecentAppt = appointments.some(a => {
+                 const d = new Date(a.start);
+                 return a.clientId === c.id && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+            });
+            const hasPendingBalance = invoices.some(i => i.clientId === c.id && i.balance > 0); // Total historical debts still make a client active
             return hasRecentInvoice || hasRecentAppt || hasPendingBalance;
         }).length;
 
-        // Contracted services counts: total service receipts issued, and active ones with pending balances
-        const totalContractedServices = invoices.length;
-        const activeContractsCount = invoices.filter(i => i.status !== 'Pagada').length;
+        // Contracted services counts: total service receipts issued this month, and active ones with pending balances
+        const totalContractedServices = filteredInvoices.length;
+        const activeContractsCount = filteredInvoices.filter(i => i.status !== 'Pagada').length;
 
         return {
             totalClients: clients.length,
@@ -63,13 +80,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ clients, invoices, expens
             totalContractedServices,
             activeContractsCount
         };
-    }, [clients, invoices, expenses, appointments]);
+    }, [clients, invoices, filteredInvoices, filteredExpenses, appointments, selectedMonth, selectedYear]);
 
     // Compute profitability per service
     const profitableServices = useMemo(() => {
         const serviceMap: { [name: string]: { count: number; billed: number; collected: number; balance: number } } = {};
         
-        invoices.forEach(inv => {
+        filteredInvoices.forEach(inv => {
             const name = inv.serviceName || 'Otros / Sin Especificar';
             if (!serviceMap[name]) {
                 serviceMap[name] = { count: 0, billed: 0, collected: 0, balance: 0 };
@@ -90,25 +107,53 @@ const DashboardView: React.FC<DashboardViewProps> = ({ clients, invoices, expens
             }))
             // Sort by collected revenue (actual cash liquidity is the ultimate profitability marker)
             .sort((a, b) => b.collected - a.collected);
-    }, [invoices]);
+    }, [filteredInvoices]);
 
     const recentInvoices = useMemo(() => {
-        return [...invoices]
+        return [...filteredInvoices]
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 5);
-    }, [invoices]);
+    }, [filteredInvoices]);
     
     // Calcula deudas pendientes por cliente
     const pendingDebts = useMemo(() => {
-        const debts = calculateAllDebts(clients, invoices);
+        const debts = calculateAllDebts(clients, filteredInvoices);
         return debts.filter(d => d.totalDebt > 0).sort((a, b) => b.totalDebt - a.totalDebt);
-    }, [clients, invoices]);
+    }, [clients, filteredInvoices]);
 
     const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c.patientName])), [clients]);
 
+    const months = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
     return (
         <div className="p-5 animate-fadeIn space-y-6 bg-gray-50 min-h-screen">
+            {/* Header controls */}
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm gap-4">
+                <h2 className="text-xl font-bold text-gray-800">Panel General</h2>
+                <div className="flex items-center space-x-2">
+                    <select 
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                        className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:border-blue-500 transition-colors"
+                    >
+                        {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                    </select>
+                    <select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(Number(e.target.value))}
+                        className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:border-blue-500 transition-colors"
+                    >
+                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
+            </div>
+
             {/* Upper Telemetry Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                 <StatCard 
